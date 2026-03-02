@@ -1,0 +1,4 @@
+PS C:\Users\seryw\Desktop\ticketbuzz-backend> node scripts/getToken.mjs
+[dotenv@17.2.4] injecting env (7) from .env.local
+✅ Token obtained, expires_in: 3600 seconds
+TOKEN: [REDACTED]

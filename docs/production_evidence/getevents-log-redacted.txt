@@ -1,0 +1,39 @@
+GetEvents attempt (production)
+Timestamp: 2026-02-11
+Executed by: node scripts/runGetEventsWithDefaults.mjs
+Command: node scripts/runGetEventsWithDefaults.mjs
+Environment: TN_API_BASE=https://api.ticketnetwork.com/TNWebservices/v4/TNWebservice.asmx
+
+Request debug (token redacted):
+Calling GetEvents -> {
+  apiUrl: 'https://api.ticketnetwork.com/TNWebservices/v4/TNWebservice.asmx',
+  headers: {
+    Accept: 'text/xml',
+    Content-Type: 'text/xml',
+    Authorization: 'Bearer [REDACTED]',
+    SOAPAction: '"http://tnwebservices.ticketnetwork.com/tnwebservice/v4.0/GetEvents"'
+  }
+}
+
+Request body (truncated):
+<?xml version="1.0" encoding="utf-8"?>
+<soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+               xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+               xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap:Body>
+    <GetEvents xmlns="http://tnwebservices.ticketnetwork.com/tnwebservice/v4.0">
+      <websiteConfigID>23933</websiteConfigID>
+      <numberOfEvents>10</numberOfEvents>
+      <venueName>sepang</venueName>
+    </GetEvents>
+  </soap:Body>
+</soap:Envelope>
+
+Response (truncated):
+HTTP/1.1 200 OK
+<soap:Envelope>...<GetEventsResponse>...(events list)...</GetEventsResponse>...</soap:Envelope>
+
+Notes:
+- Token generation succeeded earlier (expires_in: 3600) — token value redacted in this log.
+- The successful response demonstrates that production GetEvents works with the token and request used.
+- Recommended next step: request Production activation/authorization for the Production app and WCID (see email draft).
