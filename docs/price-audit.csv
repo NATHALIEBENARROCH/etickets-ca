@@ -1,0 +1,6 @@
+case,query,eventId,provider_min_retail,provider_min_wholesale,displayed_price,markup_pct,groups_count,parse_error,tested_at
+Raptors,raptors,7703845,135.47,135.47,N/A (frontend pending),N/A,6,,2026-03-03T14:33:06.202Z
+Vegas Show,vegas shows,7692427,,,N/A (frontend pending),N/A,0,,2026-03-03T14:33:06.501Z
+Baseball,baseball,7710026,,,N/A (frontend pending),N/A,0,,2026-03-03T14:33:06.910Z
+Concert,coldplay,7640734,124,124,N/A (frontend pending),N/A,20,,2026-03-03T14:33:07.318Z
+Toronto GEO sample,city=Toronto,7380491,251.36,251.36,N/A (frontend pending),N/A,30,,2026-03-03T14:33:07.652Z
