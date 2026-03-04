@@ -49,7 +49,7 @@ export default async function SearchPage({
         fallbackStrategy = (data.fallbackStrategy ?? "").trim();
       }
     }
-  } catch (e) {
+  } catch {
     errorMsg = "Couldn’t load events (network/server error).";
   }
 
@@ -69,13 +69,13 @@ export default async function SearchPage({
 
       {!!correctedQuery && correctedQuery.toLowerCase() !== q.toLowerCase() && (
         <div style={{ ...styles.panel, ...styles.panelInfo }}>
-          <div style={styles.panelTitle}>Showing results for "{correctedQuery}"</div>
+          <div style={styles.panelTitle}>Showing results for &quot;{correctedQuery}&quot;</div>
           <div style={styles.panelText}>
             We interpreted your search using <b>{fallbackStrategy || "smart matching"}</b>.
           </div>
           <div style={{ marginTop: 8 }}>
             <Link href={`/search?q=${encodeURIComponent(q)}`} style={styles.panelLink}>
-              Retry exact search for "{q}"
+              Retry exact search for &quot;{q}&quot;
             </Link>
           </div>
         </div>

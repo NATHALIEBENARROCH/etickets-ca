@@ -93,7 +93,7 @@ export default function HeroSearch() {
           )}
 
           <Link href={`/search?q=${encodeURIComponent(trimmedQuery)}`} style={styles.suggestSeeAll}>
-            View all results for "{trimmedQuery}"
+            View all results for &quot;{trimmedQuery}&quot;
           </Link>
         </div>
       ) : null}

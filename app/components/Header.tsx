@@ -156,11 +156,8 @@ export default function Header({
                     })
                   )}
 
-                  <Link
-                    href={`/search?q=${encodeURIComponent(trimmedQuery)}`}
-                    style={styles.suggestSeeAll}
-                  >
-                    View all results for "{trimmedQuery}"
+                  <Link href={`/search?q=${encodeURIComponent(trimmedQuery)}`} style={styles.suggestSeeAll}>
+                    View all results for &quot;{trimmedQuery}&quot;
                   </Link>
                 </div>
               ) : null}
