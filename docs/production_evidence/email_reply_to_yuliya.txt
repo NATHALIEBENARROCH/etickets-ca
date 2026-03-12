@@ -1,0 +1,15 @@
+Subject: Please enable existing Production app (WCID 14733) for Ticketsbuzz
+
+Hi Yuliya,
+
+Thanks for the update. We had planned to keep a separate Production application for Ticketsbuzz for security and traceability, but if you intend to remove the older/unused Production app, we'd prefer to continue using the existing Production application (WCID 14733) to avoid disruption.
+
+Please enable Production access for the client_id associated with WCID 14733. We will store the production client_id and secret in a secrets manager and rotate them as needed; we will not keep credentials in code or public repos.
+
+Attached are redacted logs demonstrating successful production testing (token generation and GetEvents). Please confirm once the app is enabled, and let us know if you need the client_id value or any other details delivered via a secure channel.
+
+Thanks,
+[Your Name]
+Ticketsbuzz
+
+Attachments: token-response-redacted.txt, getevents-log-redacted.txt

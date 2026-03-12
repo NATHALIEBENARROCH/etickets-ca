@@ -1,0 +1,32 @@
+Subject: TicketsBuzz WCID 23933 – MapWidget3 renders blank / fallback despite C3 config
+
+Hi Support Team,
+
+We need help validating MapWidget3 + C3 for TicketsBuzz (WCID 23933).
+
+We implemented the requested C3 settings:
+- Seatics.config.c3CheckoutDomain = "checkout.ticketsbuzz.com"
+- Seatics.config.c3CurrencyCode = "USD"
+- Seatics.config.useC3 = true
+
+Behavior observed:
+- The interactive seat map is often blank or falls back to “interactive seat map temporarily unavailable”.
+- This is reproducible across multiple events (e.g., event IDs 7509945 and 7509949).
+
+Objective checks:
+1) Direct upstream endpoint returns HTTP 200:
+https://mapwidget3.seatics.com/html?eventId=7509945&websiteConfigId=23933&userAgent=TicketsBuzz&forceMapOpen=true
+2) Payload does not consistently produce a renderable map in our integration context.
+3) DNS for checkout.ticketsbuzz.com currently resolves as A records, while prior guidance indicates checkout should be CNAME -> c3.ticketnetwork.com.
+
+Please confirm explicitly:
+1. WCID 23933 is fully enabled in Production for MapWidget3 + C3 (not only token/API).
+2. Required DNS topology for checkout.ticketsbuzz.com (is strict CNAME required?).
+3. Whether the endpoint above is expected to return additional render markers for valid map display.
+4. Any provider-side issue affecting these event IDs under WCID 23933.
+
+We attached a support packet with technical evidence and screenshots:
+- mapwidget-c3-support-packet-2026-03-05.md
+
+Thanks,
+TicketsBuzz
