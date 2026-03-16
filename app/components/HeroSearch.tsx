@@ -30,12 +30,17 @@ export default function HeroSearch() {
     const timeoutId = setTimeout(async () => {
       setIsLoading(true);
       try {
-        const response = await fetch(`/api/search?q=${encodeURIComponent(trimmedQuery)}&limit=6`, {
-          cache: "no-store",
-        });
+        const response = await fetch(
+          `/api/search?q=${encodeURIComponent(trimmedQuery)}&limit=6`,
+          {
+            cache: "no-store",
+          },
+        );
         if (!response.ok) return;
 
-        const payload = (await response.json()) as { result?: SuggestionItem[] };
+        const payload = (await response.json()) as {
+          result?: SuggestionItem[];
+        };
 
         if (!isCancelled) {
           setSuggestions(payload.result ?? []);
@@ -85,15 +90,23 @@ export default function HeroSearch() {
           {isLoading ? (
             <div style={styles.suggestMuted}>Searching...</div>
           ) : suggestions.length === 0 ? (
-            <div style={styles.suggestMuted}>No quick matches. Press search for full results.</div>
+            <div style={styles.suggestMuted}>
+              No quick matches. Press search for full results.
+            </div>
           ) : (
             suggestions.map((event, index) => {
               const title = event.Name || "Untitled event";
-              const meta = [event.City, event.Venue].filter(Boolean).join(" • ");
+              const meta = [event.City, event.Venue]
+                .filter(Boolean)
+                .join(" • ");
               const eventId = event.ID || index;
 
               return (
-                <Link key={`${eventId}-${index}`} href={`/event/${eventId}`} style={styles.suggestItem}>
+                <Link
+                  key={`${eventId}-${index}`}
+                  href={`/event/${eventId}`}
+                  style={styles.suggestItem}
+                >
                   <div style={styles.suggestTitle}>{title}</div>
                   <div style={styles.suggestMeta}>{meta}</div>
                 </Link>
@@ -101,7 +114,10 @@ export default function HeroSearch() {
             })
           )}
 
-          <Link href={`/search?q=${encodeURIComponent(trimmedQuery)}`} style={styles.suggestSeeAll}>
+          <Link
+            href={`/search?q=${encodeURIComponent(trimmedQuery)}`}
+            style={styles.suggestSeeAll}
+          >
             View all results for &quot;{trimmedQuery}&quot;
           </Link>
         </div>
@@ -145,7 +161,7 @@ const styles: Record<string, React.CSSProperties> = {
     padding: "14px 18px",
     borderRadius: 999,
     border: "none",
-    background: "#b11b2b",
+    background: "#29ce9f",
     color: "#fff",
     fontWeight: 800,
     cursor: "pointer",

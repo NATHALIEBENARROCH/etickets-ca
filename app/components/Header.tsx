@@ -9,9 +9,19 @@ type HeaderProps = {
   showSearch?: boolean;
 };
 
-export default function Header({ defaultQuery = "", showSearch = true }: HeaderProps) {
+export default function Header({
+  defaultQuery = "",
+  showSearch = true,
+}: HeaderProps) {
   const [q, setQ] = useState(defaultQuery);
-  const [suggestions, setSuggestions] = useState<Array<{ ID?: string | number; Name?: string; City?: string; Venue?: string }>>([]);
+  const [suggestions, setSuggestions] = useState<
+    Array<{
+      ID?: string | number;
+      Name?: string;
+      City?: string;
+      Venue?: string;
+    }>
+  >([]);
   const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const trimmedQuery = useMemo(() => q.trim(), [q]);
@@ -28,13 +38,21 @@ export default function Header({ defaultQuery = "", showSearch = true }: HeaderP
     const timeoutId = setTimeout(async () => {
       setIsLoading(true);
       try {
-        const response = await fetch(`/api/search?q=${encodeURIComponent(trimmedQuery)}&limit=6`, {
-          cache: "no-store",
-        });
+        const response = await fetch(
+          `/api/search?q=${encodeURIComponent(trimmedQuery)}&limit=6`,
+          {
+            cache: "no-store",
+          },
+        );
         if (!response.ok) return;
 
-        const payload = await response.json() as {
-          result?: Array<{ ID?: string | number; Name?: string; City?: string; Venue?: string }>;
+        const payload = (await response.json()) as {
+          result?: Array<{
+            ID?: string | number;
+            Name?: string;
+            City?: string;
+            Venue?: string;
+          }>;
         };
 
         if (!isCancelled) {
@@ -114,11 +132,15 @@ export default function Header({ defaultQuery = "", showSearch = true }: HeaderP
                   {isLoading ? (
                     <div style={styles.suggestMuted}>Searching…</div>
                   ) : suggestions.length === 0 ? (
-                    <div style={styles.suggestMuted}>No quick matches. Press search for full results.</div>
+                    <div style={styles.suggestMuted}>
+                      No quick matches. Press search for full results.
+                    </div>
                   ) : (
                     suggestions.map((event, idx) => {
                       const title = event.Name || "Untitled event";
-                      const meta = [event.City, event.Venue].filter(Boolean).join(" • ");
+                      const meta = [event.City, event.Venue]
+                        .filter(Boolean)
+                        .join(" • ");
                       const eventId = event.ID || idx;
 
                       return (
@@ -134,7 +156,10 @@ export default function Header({ defaultQuery = "", showSearch = true }: HeaderP
                     })
                   )}
 
-                  <Link href={`/search?q=${encodeURIComponent(trimmedQuery)}`} style={styles.suggestSeeAll}>
+                  <Link
+                    href={`/search?q=${encodeURIComponent(trimmedQuery)}`}
+                    style={styles.suggestSeeAll}
+                  >
                     View all results for &quot;{trimmedQuery}&quot;
                   </Link>
                 </div>
@@ -161,7 +186,7 @@ export default function Header({ defaultQuery = "", showSearch = true }: HeaderP
 
 const styles: Record<string, React.CSSProperties> = {
   header: {
-    background: "#1f2a5a",
+    background: "#000",
     color: "#fff",
   },
   nav: {

@@ -138,9 +138,9 @@ export default async function Home({
           <HeroSearch />
 
           <div style={styles.heroCtas}>
-            <Link href="/events" style={styles.ctaSecondary}>
+            {/* <Link href="/events" style={styles.ctaSecondary}>
               Browse all events
-            </Link>
+            </Link> */}
             <Link href="/events/2" style={styles.ctaSecondary}>
               Browse concerts
             </Link>
@@ -254,10 +254,10 @@ export default async function Home({
             <p style={styles.cardText}>Shows & performances</p>
           </Link>
 
-          <Link href="/events" className="tb-card" style={styles.card}>
+          {/* <Link href="/events" className="tb-card" style={styles.card}>
             <h3 style={styles.cardTitle}>⭐ All Events</h3>
             <p style={styles.cardText}>Browse everything</p>
-          </Link>
+          </Link> */}
         </div>
       </section>
 
@@ -283,7 +283,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   footerButton: {
     color: "#fff",
-    background: "#1f2a5a",
+    background: "#29CE9F",
     border: "none",
     borderRadius: 999,
     padding: "12px 28px",
@@ -469,7 +469,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: "block",
     padding: 20,
     borderRadius: 14,
-    background: "linear-gradient(180deg, #1f2a5a, #0b0f24)",
+    background: "linear-gradient(145deg, #0a0a0a, #141414)",
     color: "#fff",
     textDecoration: "none",
     border: "1px solid rgba(255,255,255,0.08)",
