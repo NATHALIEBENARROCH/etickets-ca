@@ -142,30 +142,46 @@ const styles: Record<string, React.CSSProperties> = {
     padding: "14px 16px",
     fontSize: 16,
     borderRadius: 999,
-    border: "1px solid rgba(255,255,255,0.25)",
-    background: "rgba(255,255,255,0.95)",
+    border: "1px solid rgba(255,255,255,0.22)",
+    background: "rgba(255,255,255,0.96)",
     outline: "none",
     color: "#111",
+    boxShadow: "inset 0 3px 8px rgba(0,0,0,0.22), 0 4px 10px rgba(0,0,0,0.08)",
   },
   cityInput: {
     width: 180,
     padding: "14px 16px",
     fontSize: 15,
     borderRadius: 999,
-    border: "1px solid rgba(255,255,255,0.25)",
-    background: "rgba(255,255,255,0.95)",
+    border: "1px solid rgba(255,255,255,0.22)",
+    background: "rgba(255,255,255,0.96)",
     outline: "none",
     color: "#111",
+    boxShadow: "inset 0 3px 8px rgba(0,0,0,0.22), 0 4px 10px rgba(0,0,0,0.08)",
   },
   button: {
     padding: "14px 18px",
     borderRadius: 999,
-    border: "none",
-    background: "#29ce9f",
-    color: "#fff",
+    border: "2px solid #29CE9F",
+    background: "#07110f",
+    color: "#29CE9F",
     fontWeight: 800,
     cursor: "pointer",
     minWidth: 120,
+
+    boxShadow: `
+    inset 0 0 8px rgba(41,206,159,0.25),
+    0 0 6px #29CE9F,
+    0 0 16px rgba(41,206,159,0.9),
+    0 0 34px rgba(41,206,159,0.7),
+    0 0 70px rgba(41,206,159,0.45)
+  `,
+
+    textShadow: `
+    0 0 4px #29CE9F,
+    0 0 10px #29CE9F,
+    0 0 20px rgba(41,206,159,0.9)
+  `,
   },
   suggestBox: {
     position: "absolute",

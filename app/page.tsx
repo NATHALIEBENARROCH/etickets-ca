@@ -278,8 +278,9 @@ const styles: Record<string, React.CSSProperties> = {
     display: "flex",
     justifyContent: "center",
     alignItems: "center",
-    background: "#0b0f24",
+    background: "#000000",
     marginTop: 40,
+    boxShadow: "0 -20px 40px rgba(0,0,0,0.35), 0 -8px 16px rgba(0,0,0,0.2)",
   },
   footerButton: {
     color: "#fff",
@@ -304,6 +305,7 @@ const styles: Record<string, React.CSSProperties> = {
     height: 420,
     overflow: "hidden",
     background: "#0b0f24",
+    boxShadow: "0 20px 40px rgba(0,0,0,0.45)",
   },
 
   heroImg: {
@@ -389,6 +391,7 @@ const styles: Record<string, React.CSSProperties> = {
     minWidth: 170,
     maxWidth: 220,
     background: "#fff",
+    boxShadow: "0 6px 14px rgba(0,0,0,0.12)",
   },
   locationButton: {
     border: "none",
@@ -399,6 +402,8 @@ const styles: Record<string, React.CSSProperties> = {
     background: "#1f2a5a",
     color: "#fff",
     cursor: "pointer",
+    boxShadow: "0 6px 14px rgba(0,0,0,0.18)",
+    transition: "transform 0.15s ease, box-shadow 0.15s ease",
   },
   locationBadge: {
     display: "inline-block",
@@ -409,6 +414,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 13,
     fontWeight: 700,
     color: "#1f2a5a",
+    boxShadow: "0 3px 8px rgba(0,0,0,0.12)",
   },
   locationHint: {
     fontSize: 13,
@@ -430,9 +436,10 @@ const styles: Record<string, React.CSSProperties> = {
     color: "#111",
     padding: 14,
     borderRadius: 16,
-    border: "1px solid #cfd5de",
-    background: "#eef1f5",
-    boxShadow: "0 1px 0 rgba(0, 0, 0, 0.06)",
+    border: "1px solid #d9dee7",
+    background: "#f4f6fa",
+    boxShadow: "12px 12px 30px rgba(60,60,60,0.45)",
+    transition: "transform 0.2s ease, box-shadow 0.2s ease",
   },
   localImage: {
     width: "100%",
@@ -473,6 +480,7 @@ const styles: Record<string, React.CSSProperties> = {
     color: "#fff",
     textDecoration: "none",
     border: "1px solid rgba(255,255,255,0.08)",
+    boxShadow: "0 18px 40px rgba(0,0,0,0.45)",
     transition: "transform 0.18s ease, box-shadow 0.18s ease",
   },
 
