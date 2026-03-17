@@ -164,8 +164,9 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: 999,
     border: "2px solid #29CE9F",
     background: "#07110f",
-    color: "#29CE9F",
+    color: "#ffffff",
     fontWeight: 800,
+    letterSpacing: "0.4px",
     cursor: "pointer",
     minWidth: 120,
 
@@ -178,9 +179,9 @@ const styles: Record<string, React.CSSProperties> = {
   `,
 
     textShadow: `
-    0 0 4px #29CE9F,
-    0 0 10px #29CE9F,
-    0 0 20px rgba(41,206,159,0.9)
+    0 0 2px #ffffff,
+    0 0 6px #29CE9F,
+    0 0 14px rgba(41,206,159,0.8)
   `,
   },
   suggestBox: {
