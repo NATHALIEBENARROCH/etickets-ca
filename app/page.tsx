@@ -6,6 +6,7 @@ import HeroSearch from "@/app/components/HeroSearch";
 import AutoGeoCity from "@/app/components/AutoGeoCity";
 import EventCardImage from "@/app/components/EventCardImage";
 import GeoCarouselIndicators from "@/app/components/GeoCarouselIndicators";
+import { resolveEventImageCandidates } from "@/lib/eventImages";
 
 type EventItem = {
   ID: number;
@@ -24,37 +25,6 @@ const POPULAR_SEARCH_TERMS = [
   "miami heat",
   "montreal canadiens",
 ];
-
-function resolveEventImageCandidates(event: EventItem) {
-  const raw = (event.MapURL || "").trim();
-  const artistName = (event.Name || "").trim();
-  const artistPhoto = artistName
-    ? `/api/artist-photo?name=${encodeURIComponent(artistName)}`
-    : "";
-
-  if (!raw) {
-    return [artistPhoto, "/hero.png"].filter(Boolean);
-  }
-
-  const normalized = raw.toLowerCase();
-  const hasGenericMapKeyword = [
-    "generaladmissionevent",
-    "seat",
-    "seating",
-    "venue",
-    "map",
-    "chart",
-    "floorplan",
-  ].some((keyword) => normalized.includes(keyword));
-
-  const secureMapUrl = raw.replace(/^http:\/\//i, "https://");
-
-  if (hasGenericMapKeyword || normalized.endsWith(".gif")) {
-    return [artistPhoto, secureMapUrl, "/hero.png"].filter(Boolean);
-  }
-
-  return [secureMapUrl, artistPhoto, "/hero.png"].filter(Boolean);
-}
 
 function normalizeCity(raw: string) {
   let city = (raw || "").trim().replace(/\+/g, " ");

@@ -371,7 +371,7 @@ export async function GET(request) {
   const city = (searchParams.get("city") || "").trim();
   const rawLimit = Number.parseInt(searchParams.get("limit") || "20", 10);
   const numberOfEvents = Number.isFinite(rawLimit) && rawLimit > 0
-    ? Math.min(rawLimit, 50)
+    ? Math.min(rawLimit, 200)
     : 20;
 
   const cacheKey = `${query.toLowerCase()}|${city.toLowerCase()}|${numberOfEvents}`;

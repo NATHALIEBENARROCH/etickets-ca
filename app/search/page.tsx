@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { baseUrl } from "@/lib/api";
 import { formatEventDate } from "@/lib/dateFormat";
 import EventCardImage from "@/app/components/EventCardImage";
+import { resolveEventImageCandidates } from "@/lib/eventImages";
 
 type EventItem = {
   id?: string | number;
@@ -19,41 +20,25 @@ type EventItem = {
   MapURL?: string;
 };
 
-function resolveEventImageCandidates(event: EventItem) {
-  const raw = (event.MapURL || "").trim();
-  const artistName = (event.Name ?? event.name ?? event.eventName ?? "").trim();
-  const artistPhoto = artistName
-    ? `/api/artist-photo?name=${encodeURIComponent(artistName)}`
-    : "";
+const PAGE_STEP = 50;
+const MAX_LIMIT = 200;
 
-  if (!raw) {
-    return [artistPhoto, "/hero.png"].filter(Boolean);
+function buildSearchHref(query: string, options: { city?: string; limit: number }) {
+  const params = new URLSearchParams();
+  params.set("q", query);
+  params.set("limit", String(options.limit));
+
+  if (options.city) {
+    params.set("city", options.city);
   }
 
-  const normalized = raw.toLowerCase();
-  const hasGenericMapKeyword = [
-    "generaladmissionevent",
-    "seat",
-    "seating",
-    "venue",
-    "map",
-    "chart",
-    "floorplan",
-  ].some((keyword) => normalized.includes(keyword));
-
-  const secureMapUrl = raw.replace(/^http:\/\//i, "https://");
-
-  if (hasGenericMapKeyword || normalized.endsWith(".gif")) {
-    return [artistPhoto, secureMapUrl, "/hero.png"].filter(Boolean);
-  }
-
-  return [secureMapUrl, artistPhoto, "/hero.png"].filter(Boolean);
+  return `/search?${params.toString()}#results`;
 }
 
 export default async function SearchPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; city?: string }> | { q?: string; city?: string };
+  searchParams: Promise<{ q?: string; city?: string; limit?: string }> | { q?: string; city?: string; limit?: string };
 }) {
   const requestHeaders = await headers();
   const requestHost = requestHeaders.get("host") || "";
@@ -63,6 +48,10 @@ export default async function SearchPage({
   const resolvedSearchParams = await searchParams;
   const q = (resolvedSearchParams?.q ?? "").trim();
   const city = (resolvedSearchParams?.city ?? "").trim();
+  const rawLimit = Number.parseInt(resolvedSearchParams?.limit || `${PAGE_STEP}`, 10);
+  const limit = Number.isFinite(rawLimit) && rawLimit > 0
+    ? Math.min(rawLimit, MAX_LIMIT)
+    : PAGE_STEP;
   let events: EventItem[] = [];
   let errorMsg = "";
   let correctedQuery = "";
@@ -71,7 +60,7 @@ export default async function SearchPage({
   try {
     if (q) {
       const res = await fetch(
-        `${currentOrigin}/api/search?q=${encodeURIComponent(q)}&city=${encodeURIComponent(city)}`,
+        `${currentOrigin}/api/search?q=${encodeURIComponent(q)}&city=${encodeURIComponent(city)}&limit=${limit}`,
         { cache: "no-store" },
       );
 
@@ -144,6 +133,7 @@ export default async function SearchPage({
       )}
 
       {q && !errorMsg && (
+        <div id="results" style={styles.resultsBlock}>
         <div style={styles.grid}>
           {events.map((e, idx) => {
             const title = e.Name ?? e.name ?? e.eventName ?? "Untitled event";
@@ -179,6 +169,20 @@ export default async function SearchPage({
               </div>
             );
           })}
+        </div>
+        <div style={styles.paginationRow}>
+          {events.length >= limit && limit < MAX_LIMIT ? (
+            <Link href={buildSearchHref(q, { city, limit: Math.min(limit + PAGE_STEP, MAX_LIMIT) })} style={styles.paginationLink}>
+              Load more
+            </Link>
+          ) : null}
+
+          {limit > PAGE_STEP ? (
+            <Link href={buildSearchHref(q, { city, limit: PAGE_STEP })} style={styles.paginationLink}>
+              Show less
+            </Link>
+          ) : null}
+        </div>
         </div>
       )}
     </main>
@@ -218,6 +222,10 @@ const styles: Record<string, React.CSSProperties> = {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
     gap: 14,
+  },
+  resultsBlock: {
+    maxWidth: 1100,
+    margin: "0 auto",
   },
   card: {
     padding: 16,
@@ -278,5 +286,20 @@ const styles: Record<string, React.CSSProperties> = {
     background: "rgba(0,0,0,0.25)",
     padding: "2px 8px",
     borderRadius: 8,
+  },
+  paginationRow: {
+    display: "flex",
+    gap: 12,
+    marginTop: 16,
+  },
+  paginationLink: {
+    color: "#fff",
+    textDecoration: "none",
+    fontWeight: 800,
+    border: "1px solid rgba(255,255,255,0.25)",
+    padding: "8px 12px",
+    borderRadius: 999,
+    display: "inline-block",
+    background: "rgba(0,0,0,0.15)",
   },
 };

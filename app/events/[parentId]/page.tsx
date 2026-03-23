@@ -6,6 +6,7 @@ import { headers } from "next/headers";
 import { getCategoriesMasterList } from "@/lib/soapClient";
 import EventCardImage from "@/app/components/EventCardImage";
 import AutoGeoCity from "@/app/components/AutoGeoCity";
+import { resolveEventImageCandidates } from "@/lib/eventImages";
 
 type EventItem = {
   ID: number;
@@ -168,15 +169,6 @@ function normalizeToken(value: string) {
     .replace(/[^a-z0-9\s]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
-}
-
-function resolveEventImageCandidates(event: EventItem) {
-  const artistName = (event.Name || "").trim();
-  const artistPhoto = artistName
-    ? `/api/artist-photo?name=${encodeURIComponent(artistName)}`
-    : "";
-
-  return [artistPhoto, "/hero.png"].filter(Boolean);
 }
 
 function buildCategoryHref(parentId: number, options: { limit: number; sub?: string; city?: string }) {
@@ -394,7 +386,7 @@ export default async function CategoryPage({
         ))}
       </div>
 
-      <div style={{ marginTop: 10 }}>
+      <div id="results" style={{ marginTop: 10 }}>
         {visibleEvents.length === 0 ? (
           <p>No events for this subcategory.</p>
         ) : (
@@ -484,11 +476,11 @@ export default async function CategoryPage({
         <div style={{ display: "flex", gap: 12, marginTop: 10 }}>
           {filtered.length > limit && limit < MAX_LIMIT ? (
             <Link
-              href={buildCategoryHref(parentId, {
+              href={`${buildCategoryHref(parentId, {
                 limit: Math.min(limit + PAGE_STEP, MAX_LIMIT),
                 sub: activeSub !== "all" ? activeSub : undefined,
                 city: activeCity,
-              })}
+              })}#results`}
             >
               Load more
             </Link>
@@ -496,11 +488,11 @@ export default async function CategoryPage({
 
           {limit > PAGE_STEP ? (
             <Link
-              href={buildCategoryHref(parentId, {
+              href={`${buildCategoryHref(parentId, {
                 limit: PAGE_STEP,
                 sub: activeSub !== "all" ? activeSub : undefined,
                 city: activeCity,
-              })}
+              })}#results`}
             >
               Show less
             </Link>
