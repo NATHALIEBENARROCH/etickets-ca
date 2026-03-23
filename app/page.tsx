@@ -26,6 +26,21 @@ const POPULAR_SEARCH_TERMS = [
   "montreal canadiens",
 ];
 
+const NEARBY_CITY_CANDIDATES: Record<string, string[]> = {
+  laval: ["Montreal", "Longueuil", "Brossard", "Laval"],
+  montreal: ["Laval", "Longueuil", "Brossard", "Laval"],
+  longueuil: ["Montreal", "Laval", "Brossard", "Quebec"],
+  brossard: ["Montreal", "Longueuil", "Laval", "Quebec"],
+  quebec: ["Levis", "Montreal", "Trois-Rivieres", "Sherbrooke"],
+  toronto: ["Mississauga", "North York", "Scarborough", "Hamilton"],
+  mississauga: ["Toronto", "North York", "Scarborough", "Hamilton"],
+  vancouver: ["Burnaby", "Richmond", "Surrey", "Victoria"],
+  burnaby: ["Vancouver", "Richmond", "Surrey", "Victoria"],
+  calgary: ["Airdrie", "Edmonton", "Red Deer", "Lethbridge"],
+  edmonton: ["St. Albert", "Calgary", "Red Deer", "Leduc"],
+  ottawa: ["Gatineau", "Montreal", "Kingston", "Cornwall"],
+};
+
 function normalizeCity(raw: string) {
   let city = (raw || "").trim().replace(/\+/g, " ");
   for (let index = 0; index < 3; index += 1) {
@@ -37,6 +52,9 @@ function normalizeCity(raw: string) {
       break;
     }
   }
+  city = city
+    .replace(/\s*\((administrative\s+region|region\s+administrative)\)\s*$/i, "")
+    .trim();
   return city;
 }
 
@@ -48,6 +66,20 @@ function normalizeToken(value: string | undefined) {
     .replace(/[^a-z0-9\s]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function getNearbyCityCandidates(city: string) {
+  const normalizedCity = normalizeToken(city);
+  if (!normalizedCity) return [];
+
+  const canonical = NEARBY_CITY_CANDIDATES[normalizedCity] || [];
+  return canonical.filter((candidate) => normalizeToken(candidate) !== normalizedCity);
+}
+
+function hasExactCityMatch(events: EventItem[], city: string) {
+  const normalizedCity = normalizeToken(city);
+  if (!normalizedCity) return events.length > 0;
+  return events.some((event) => normalizeToken(event?.City) === normalizedCity);
 }
 
 function uniqueByEventId(events: EventItem[]) {
@@ -209,13 +241,35 @@ export default async function Home({
     ? await fetchEventList(localizedApiUrl)
     : { events: [] as EventItem[], ok: true };
   const localizedEvents = localizedFetch.events;
+  const hasExactLocalMatch = hasExactCityMatch(localizedEvents, activeCity);
+
+  let nearbyCityUsed = "";
+  let nearbyEvents: EventItem[] = [];
+  let nearbyOk = true;
+
+  if (activeCity && !hasExactLocalMatch) {
+    const nearbyCandidates = getNearbyCityCandidates(activeCity);
+    for (const nearbyCity of nearbyCandidates) {
+      const nearbyFetch = await fetchEventList(
+        `${currentOrigin}/api/events?numberOfEvents=8&city=${encodeURIComponent(nearbyCity)}&cityScope=city&diversify=1`,
+      );
+
+      nearbyOk = nearbyOk && nearbyFetch.ok;
+
+      if (nearbyFetch.events.length > 0 && hasExactCityMatch(nearbyFetch.events, nearbyCity)) {
+        nearbyCityUsed = nearbyCity;
+        nearbyEvents = nearbyFetch.events;
+        break;
+      }
+    }
+  }
 
   const curatedPopularFetch =
-    localizedEvents.length === 0
+    localizedEvents.length === 0 && nearbyEvents.length === 0
       ? await fetchPopularFallback()
       : { events: [] as EventItem[], ok: true };
   const backupFallbackFetch =
-    localizedEvents.length === 0 && curatedPopularFetch.events.length === 0
+    localizedEvents.length === 0 && nearbyEvents.length === 0 && curatedPopularFetch.events.length === 0
       ? await fetchEventList(
           `${currentOrigin}/api/events?numberOfEvents=8&parentCategoryID=2&diversify=1`,
         )
@@ -225,17 +279,24 @@ export default async function Home({
       ? curatedPopularFetch.events
       : backupFallbackFetch.events;
 
-  const eventsToShow =
-    localizedEvents.length > 0 ? localizedEvents : fallbackEvents;
+  const eventsToShow = hasExactLocalMatch
+    ? localizedEvents
+    : (nearbyEvents.length > 0 ? nearbyEvents : fallbackEvents);
 
   const hadApiError =
-    localizedEvents.length === 0 && fallbackEvents.length === 0
-      ? !localizedFetch.ok && !curatedPopularFetch.ok && !backupFallbackFetch.ok
+    localizedEvents.length === 0 && nearbyEvents.length === 0 && fallbackEvents.length === 0
+      ? !localizedFetch.ok && !nearbyOk && !curatedPopularFetch.ok && !backupFallbackFetch.ok
       : false;
-  const hasLocalEvents = localizedEvents.length > 0;
+  const hasLocalEvents = hasExactLocalMatch;
+  const hasNearbyEvents = !hasLocalEvents && nearbyEvents.length > 0;
   const hasPopularFallback =
-    localizedEvents.length === 0 && fallbackEvents.length > 0;
+    !hasLocalEvents && !hasNearbyEvents && fallbackEvents.length > 0;
   const locationText = activeCity || "your area";
+  const sectionHeading = hasLocalEvents
+    ? `Events in ${locationText}`
+    : (hasNearbyEvents
+      ? `Events near ${locationText}`
+      : "Popular events right now");
 
   return (
     <main style={styles.page}>
@@ -262,7 +323,7 @@ export default async function Home({
       </section>
 
       <section style={styles.section}>
-        <h2 style={styles.sectionTitle}>Events in {locationText}</h2>
+        <h2 style={styles.sectionTitle}>{sectionHeading}</h2>
         <AutoGeoCity hasCity={Boolean(activeCity)} />
 
         <div style={styles.locationRow}>
@@ -285,12 +346,19 @@ export default async function Home({
           <span style={styles.locationBadge}>You are in: {locationText}</span>
           {!hasLocalEvents && !hasPopularFallback ? (
             <span style={styles.locationHint}>
-              No direct local matches, showing popular events.
+              Looking for nearby events.
+            </span>
+          ) : null}
+          {!hasLocalEvents && hasNearbyEvents ? (
+            <span style={styles.locationHint}>
+              No direct matches in {locationText}. Showing events in {nearbyCityUsed}.
             </span>
           ) : null}
           {!hasLocalEvents && hasPopularFallback ? (
             <span style={styles.locationHint}>
-              Showing popular events right now.
+              {activeCity
+                ? `No direct matches in ${locationText}. Showing popular events right now.`
+                : "Showing popular events right now."}
             </span>
           ) : null}
         </div>
@@ -309,7 +377,7 @@ export default async function Home({
               style={styles.localGrid}
             >
               {eventsToShow.slice(0, 6).map((event) => {
-                  const imageSources = resolveEventImageCandidates(event, { allowMapFallback: false });
+                const imageSources = resolveEventImageCandidates(event);
                 return (
                   <Link
                     key={event.ID}
