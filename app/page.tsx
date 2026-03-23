@@ -16,6 +16,15 @@ type EventItem = {
   MapURL?: string;
 };
 
+const POPULAR_SEARCH_TERMS = [
+  "bruno mars",
+  "lady gaga",
+  "coldplay",
+  "taylor swift",
+  "miami heat",
+  "montreal canadiens",
+];
+
 function resolveEventImageCandidates(event: EventItem) {
   const raw = (event.MapURL || "").trim();
   const artistName = (event.Name || "").trim();
@@ -61,6 +70,89 @@ function normalizeCity(raw: string) {
   return city;
 }
 
+function normalizeToken(value: string | undefined) {
+  return String(value || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function uniqueByEventId(events: EventItem[]) {
+  const seen = new Set<number>();
+  const unique: EventItem[] = [];
+
+  for (const event of events) {
+    if (!event?.ID || seen.has(event.ID)) continue;
+    seen.add(event.ID);
+    unique.push(event);
+  }
+
+  return unique;
+}
+
+function toEventTimestamp(event: EventItem) {
+  const rawDate = event?.DisplayDate;
+  if (!rawDate) return Number.POSITIVE_INFINITY;
+  const parsed = Date.parse(rawDate);
+  return Number.isNaN(parsed) ? Number.POSITIVE_INFINITY : parsed;
+}
+
+function isTributeLikeName(name: string | undefined) {
+  const normalizedName = normalizeToken(name);
+  if (!normalizedName) return false;
+
+  return [
+    " tribute",
+    "tribute ",
+    "candlelight",
+    "featuring the music of",
+    "the music of",
+    "experience",
+  ].some((token) => normalizedName.includes(token));
+}
+
+function scorePopularEvent(event: EventItem, seedTerm: string) {
+  const normalizedSeed = normalizeToken(seedTerm);
+  const normalizedName = normalizeToken(event?.Name);
+  if (!normalizedSeed || !normalizedName) return Number.NEGATIVE_INFINITY;
+
+  let score = 0;
+  if (normalizedName === normalizedSeed) score += 120;
+  if (normalizedName.startsWith(normalizedSeed)) score += 80;
+  if (normalizedName.includes(normalizedSeed)) score += 50;
+  if (isTributeLikeName(event?.Name) && normalizedName !== normalizedSeed) score -= 35;
+  score -= Math.min(toEventTimestamp(event), Number.MAX_SAFE_INTEGER) / 1e13;
+  return score;
+}
+
+function interleavePopularEvents(groups: Array<{ term: string; events: EventItem[] }>, limit: number) {
+  const merged: EventItem[] = [];
+  const seen = new Set<number>();
+  let currentIndex = 0;
+
+  while (merged.length < limit) {
+    let addedInRound = false;
+
+    for (const group of groups) {
+      const event = group.events[currentIndex];
+      if (!event?.ID || seen.has(event.ID)) continue;
+      seen.add(event.ID);
+      merged.push(event);
+      addedInRound = true;
+
+      if (merged.length >= limit) break;
+    }
+
+    if (!addedInRound) break;
+    currentIndex += 1;
+  }
+
+  return merged;
+}
+
 export default async function Home({
   searchParams,
 }: {
@@ -95,6 +187,50 @@ export default async function Home({
     }
   }
 
+  async function fetchSearchList(query: string) {
+    try {
+      const response = await fetch(
+        `${currentOrigin}/api/search?q=${encodeURIComponent(query)}&limit=6`,
+        { cache: "no-store" },
+      );
+      if (!response.ok) return { events: [] as EventItem[], ok: false };
+      const data = await response.json();
+      return {
+        events: (data?.result ?? []) as EventItem[],
+        ok: true,
+      };
+    } catch {
+      return { events: [] as EventItem[], ok: false };
+    }
+  }
+
+  async function fetchPopularFallback() {
+    const seededResults = await Promise.all(
+      POPULAR_SEARCH_TERMS.map(async (term) => {
+        const response = await fetchSearchList(term);
+        const rankedEvents = uniqueByEventId(response.events)
+          .map((event) => ({
+            event,
+            score: scorePopularEvent(event, term),
+          }))
+          .sort((firstEvent, secondEvent) => secondEvent.score - firstEvent.score)
+          .map((item) => item.event)
+          .slice(0, 4);
+
+        return {
+          term,
+          events: rankedEvents,
+          ok: response.ok,
+        };
+      }),
+    );
+
+    return {
+      events: interleavePopularEvents(seededResults, 8),
+      ok: seededResults.some((item) => item.ok),
+    };
+  }
+
   const localizedApiUrl = activeCity
     ? `${currentOrigin}/api/events?numberOfEvents=8&city=${encodeURIComponent(activeCity)}&cityScope=city&diversify=1`
     : "";
@@ -104,20 +240,27 @@ export default async function Home({
     : { events: [] as EventItem[], ok: true };
   const localizedEvents = localizedFetch.events;
 
-  const fallbackFetch =
+  const curatedPopularFetch =
     localizedEvents.length === 0
+      ? await fetchPopularFallback()
+      : { events: [] as EventItem[], ok: true };
+  const backupFallbackFetch =
+    localizedEvents.length === 0 && curatedPopularFetch.events.length === 0
       ? await fetchEventList(
-          `${currentOrigin}/api/events?numberOfEvents=8&diversify=1`,
+          `${currentOrigin}/api/events?numberOfEvents=8&parentCategoryID=2&diversify=1`,
         )
       : { events: [] as EventItem[], ok: true };
-  const fallbackEvents = fallbackFetch.events;
+  const fallbackEvents =
+    curatedPopularFetch.events.length > 0
+      ? curatedPopularFetch.events
+      : backupFallbackFetch.events;
 
   const eventsToShow =
     localizedEvents.length > 0 ? localizedEvents : fallbackEvents;
 
   const hadApiError =
     localizedEvents.length === 0 && fallbackEvents.length === 0
-      ? !localizedFetch.ok && !fallbackFetch.ok
+      ? !localizedFetch.ok && !curatedPopularFetch.ok && !backupFallbackFetch.ok
       : false;
   const hasLocalEvents = localizedEvents.length > 0;
   const hasPopularFallback =
@@ -303,9 +446,10 @@ const styles: Record<string, React.CSSProperties> = {
   hero: {
     position: "relative",
     height: 420,
-    overflow: "hidden",
+    overflow: "visible",
     background: "#0b0f24",
     boxShadow: "0 20px 40px rgba(0,0,0,0.45)",
+    zIndex: 2,
   },
 
   heroImg: {
@@ -325,6 +469,7 @@ const styles: Record<string, React.CSSProperties> = {
     alignItems: "center",
     padding: 18,
     textAlign: "center",
+    zIndex: 3,
   },
 
   heroTitle: {

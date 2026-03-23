@@ -48,6 +48,15 @@ type SeaticsWindow = Window & {
   };
 };
 
+function normalizeWidgetValue(value?: string) {
+  return String(value || "")
+    .replace(/\\r\\n/g, "")
+    .replace(/\\n/g, "")
+    .replace(/\\r/g, "")
+    .replace(/[\r\n]+/g, "")
+    .trim();
+}
+
 function resolveRenderer(): UnknownRenderer {
   const runtime = window as Window & {
     MapWidget3?: { render?: UnknownRenderer };
@@ -98,6 +107,14 @@ export default function EventSeatMap({
   const isSeaticsScriptMode = /seatics\.com\/(mobile\/js|js)/i.test(widgetScriptUrl);
   const scriptOnlyDiagnosticMode = false;
   const useInlineSeaticsLoader = isSeaticsScriptMode && !scriptOnlyDiagnosticMode;
+  const normalizedWcid = useMemo(() => normalizeWidgetValue(wcid), [wcid]);
+  const normalizedTicketLink = useMemo(() => normalizeWidgetValue(ticketLink), [ticketLink]);
+  const normalizedInteractiveMapUrl = useMemo(() => normalizeWidgetValue(interactiveMapUrl), [interactiveMapUrl]);
+  const canUseDirectMapFallback = useMemo(() => {
+    if (!normalizedInteractiveMapUrl) return false;
+    if (/\.swf(?:$|[?#])/i.test(normalizedInteractiveMapUrl)) return false;
+    return /^https?:\/\//i.test(normalizedInteractiveMapUrl);
+  }, [normalizedInteractiveMapUrl]);
 
   const containerId = useMemo(() => `tn-mapwidget-${eventId}`, [eventId]);
 
@@ -105,21 +122,21 @@ export default function EventSeatMap({
     if (!widgetScriptUrl) return "";
     const delimiter = widgetScriptUrl.includes("?") ? "&" : "?";
     const darkThemeParam = useDarkTheme ? "&useDarkTheme=true" : "";
-    return `${widgetScriptUrl}${delimiter}eventId=${encodeURIComponent(String(eventId))}&websiteConfigId=${encodeURIComponent(String(wcid || ""))}${darkThemeParam}`;
-  }, [eventId, useDarkTheme, widgetScriptUrl, wcid]);
+    return `${widgetScriptUrl}${delimiter}eventId=${encodeURIComponent(String(eventId))}&websiteConfigId=${encodeURIComponent(normalizedWcid)}${darkThemeParam}`;
+  }, [eventId, normalizedWcid, useDarkTheme, widgetScriptUrl]);
 
   const seaticsHtmlSrc = useMemo(() => {
-    if (!wcid) return "";
-    const base = `/api/mapwidget/html?eventId=${encodeURIComponent(String(eventId))}&websiteConfigId=${encodeURIComponent(String(wcid))}&userAgent=${encodeURIComponent("TicketsBuzz")}&forceMapOpen=true&ticketUrl=${encodeURIComponent(ticketLink)}`;
+    if (!normalizedWcid) return "";
+    const base = `/api/mapwidget/html?eventId=${encodeURIComponent(String(eventId))}&websiteConfigId=${encodeURIComponent(normalizedWcid)}&userAgent=${encodeURIComponent("TicketsBuzz")}&forceMapOpen=true&ticketUrl=${encodeURIComponent(normalizedTicketLink)}`;
     return useDarkTheme ? `${base}&useDarkTheme=true` : base;
-  }, [eventId, ticketLink, useDarkTheme, wcid]);
+  }, [eventId, normalizedTicketLink, normalizedWcid, useDarkTheme]);
 
   const htmlIframeSrc = useMemo(() => {
-    if (useDirectMapFallback && interactiveMapUrl) return interactiveMapUrl;
+    if (useDirectMapFallback && canUseDirectMapFallback) return normalizedInteractiveMapUrl;
     if (!seaticsHtmlSrc) return "";
     const joiner = seaticsHtmlSrc.includes("?") ? "&" : "?";
     return `${seaticsHtmlSrc}${joiner}_attempt=${htmlAttempt}`;
-  }, [htmlAttempt, interactiveMapUrl, seaticsHtmlSrc, useDirectMapFallback]);
+  }, [canUseDirectMapFallback, htmlAttempt, normalizedInteractiveMapUrl, seaticsHtmlSrc, useDirectMapFallback]);
 
   const mapShellStyle = {
     width: "100%",
@@ -150,7 +167,9 @@ export default function EventSeatMap({
 
       return (
         text.includes("sorry, there are no results for this event") ||
-        text.includes("there are no results for this event")
+        text.includes("there are no results for this event") ||
+        text.includes("404 - file or directory not found") ||
+        text.includes("resource you are looking for might have been removed")
       );
     } catch {
       return false;
@@ -171,7 +190,7 @@ export default function EventSeatMap({
       if (data.type === "TN_EMBED_CHECKOUT_ATTEMPT") {
         const attemptUrl = typeof data.checkoutUrl === "string" && data.checkoutUrl.startsWith("http")
           ? data.checkoutUrl
-          : ticketLink;
+          : normalizedTicketLink;
 
         // If checkout attempt does not navigate top-level (blocked), expose fallback shortly after.
         window.setTimeout(() => {
@@ -193,7 +212,7 @@ export default function EventSeatMap({
     return () => {
       window.removeEventListener("message", onMessage);
     };
-  }, [debugMapWidget, shouldUseHtmlMode, ticketLink]);
+  }, [debugMapWidget, normalizedTicketLink, shouldUseHtmlMode]);
 
   useEffect(() => {
     if (!shouldUseHtmlMode || iframeLoaded) return;
@@ -206,7 +225,7 @@ export default function EventSeatMap({
         return;
       }
 
-      if (!useDirectMapFallback && interactiveMapUrl) {
+      if (!useDirectMapFallback && canUseDirectMapFallback) {
         setUseDirectMapFallback(true);
         return;
       }
@@ -218,7 +237,7 @@ export default function EventSeatMap({
     return () => {
       window.clearTimeout(timer);
     };
-  }, [htmlAttempt, iframeLoaded, interactiveMapUrl, shouldUseHtmlMode, useDirectMapFallback]);
+  }, [canUseDirectMapFallback, htmlAttempt, iframeLoaded, shouldUseHtmlMode, useDirectMapFallback]);
 
   function hasRenderedMapContent(target: HTMLDivElement) {
     if (!target) return false;
@@ -243,7 +262,7 @@ export default function EventSeatMap({
           The interactive seat map is temporarily unavailable for this event.
         </p>
         <a
-          href={ticketLink}
+          href={normalizedTicketLink}
           target="_blank"
           rel="noreferrer"
           style={{
@@ -266,7 +285,7 @@ export default function EventSeatMap({
     const useHtmlMode = shouldUseHtmlMode;
     if (!widgetEnabled || useHtmlMode || !useInlineSeaticsLoader || hasInitialized.current) return;
     const target = seaticsContainerRef.current;
-    if (!target || !seaticsScriptSrc || !wcid) return;
+    if (!target || !seaticsScriptSrc || !normalizedWcid) return;
 
     hasInitialized.current = true;
     didPromoteCheckoutRef.current = false;
@@ -278,20 +297,20 @@ export default function EventSeatMap({
     const runtimeHost = (window.location.hostname || "").toLowerCase();
     const isLocalRuntime = runtimeHost === "localhost" || runtimeHost === "127.0.0.1";
     const configuredCheckoutHost = (checkoutConfig?.c3CheckoutDomain || "").toLowerCase();
-    const preferredCheckoutHost = configuredCheckoutHost || "checkout.ticketsbuzz.com";
+    const preferredCheckoutHost = configuredCheckoutHost || "";
 
     const normalizeCheckoutUrl = (value?: string | null) => {
       if (!value) return "";
       try {
         const parsed = new URL(value, window.location.href);
         const host = (parsed.hostname || "").toLowerCase();
-        if (!host.endsWith("etickets.ca")) return parsed.toString();
+        if (!preferredCheckoutHost || !host.startsWith("checkout.")) return parsed.toString();
         parsed.protocol = "https:";
         parsed.hostname = preferredCheckoutHost;
         parsed.port = "";
         return parsed.toString();
       } catch {
-        return String(value).replace(/checkout\.etickets\.ca/gi, preferredCheckoutHost);
+        return String(value);
       }
     };
 
@@ -408,7 +427,7 @@ export default function EventSeatMap({
     runtime.Seatics.config.skipPrecheckoutMobile = false;
     runtime.Seatics.config.skipPrecheckoutDesktop = false;
 
-    const hasC3 = Boolean((checkoutConfig?.useC3 || !isLocalRuntime) && preferredCheckoutHost);
+    const hasC3 = Boolean(checkoutConfig?.useC3 && preferredCheckoutHost);
     if (hasC3) {
       runtime.Seatics.config.useC3 = true;
       runtime.Seatics.config.c3CheckoutDomain = preferredCheckoutHost;
@@ -422,7 +441,8 @@ export default function EventSeatMap({
     } else if (isLocalRuntime && checkoutConfig?.c2CheckoutUrl) {
       runtime.Seatics.config.checkoutUrl = checkoutConfig.c2CheckoutUrl;
     } else {
-      runtime.Seatics.config.checkoutUrl = ticketLink;
+      runtime.Seatics.config.checkoutUrl = normalizedTicketLink;
+      runtime.Seatics.config.useC3 = false;
     }
 
     const script = document.createElement("script");
@@ -557,7 +577,7 @@ export default function EventSeatMap({
       if (hardFallbackTimer) clearTimeout(hardFallbackTimer);
       target.innerHTML = "";
     };
-  }, [checkoutConfig, forceHtmlMode, scriptRetryKey, seaticsHtmlSrc, seaticsScriptSrc, shouldUseHtmlMode, ticketLink, useInlineSeaticsLoader, wcid, widgetEnabled]);
+  }, [checkoutConfig, forceHtmlMode, normalizedTicketLink, normalizedWcid, scriptRetryKey, seaticsHtmlSrc, seaticsScriptSrc, shouldUseHtmlMode, useInlineSeaticsLoader, widgetEnabled]);
 
   function initializeWidget() {
     if (!widgetEnabled || hasInitialized.current) return;
@@ -573,11 +593,11 @@ export default function EventSeatMap({
       renderer({
         containerId,
         eventId,
-        websiteConfigId: wcid,
+        websiteConfigId: normalizedWcid,
         bid,
         siteNumber,
         tid: ticketWidgetId,
-        ticketUrl: ticketLink,
+        ticketUrl: normalizedTicketLink,
         interactiveMapUrl,
       });
 
@@ -641,7 +661,7 @@ export default function EventSeatMap({
         {showExternalCheckout ? (
           <div style={{ marginTop: 12 }}>
             <a
-              href={blockedCheckoutUrl || ticketLink}
+              href={blockedCheckoutUrl || normalizedTicketLink}
               target="_blank"
               rel="noreferrer noopener"
               style={{
@@ -750,10 +770,10 @@ export default function EventSeatMap({
     );
   }
 
-  if (interactiveMapUrl) {
+  if (canUseDirectMapFallback) {
     return (
       <iframe
-        src={interactiveMapUrl}
+        src={normalizedInteractiveMapUrl}
         title="Interactive seat map"
         style={{
           width: "100%",
@@ -768,11 +788,5 @@ export default function EventSeatMap({
     );
   }
 
-  return (
-    <p style={{ color: "#777" }}>
-      Interactive map is not configured yet. Enable
-      `NEXT_PUBLIC_TN_ENABLE_MAPWIDGET3` and provide widget script/BID/site env
-      values.
-    </p>
-  );
+  return renderFallback();
 }

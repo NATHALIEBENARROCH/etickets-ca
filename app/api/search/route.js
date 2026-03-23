@@ -6,6 +6,8 @@ const SEARCH_CACHE_MAX_ITEMS = Number.parseInt(process.env.SEARCH_CACHE_MAX_ITEM
 const searchCache = new Map();
 const SEARCH_DICTIONARY = [
   "coldplay",
+  "lady gaga",
+  "bruno mars",
   "taylor swift",
   "montreal canadiens",
   "miami heat",
@@ -66,10 +68,9 @@ function compareEventNames(firstEvent, secondEvent) {
 
 function sortEventsForListing(events) {
   return [...events].sort((firstEvent, secondEvent) => {
-    const byName = compareEventNames(firstEvent, secondEvent);
-    if (byName !== 0) return byName;
-
-    return toEventTimestamp(firstEvent) - toEventTimestamp(secondEvent);
+    const byDate = toEventTimestamp(firstEvent) - toEventTimestamp(secondEvent);
+    if (byDate !== 0) return byDate;
+    return compareEventNames(firstEvent, secondEvent);
   });
 }
 
@@ -129,6 +130,51 @@ function getTypoCorrectedQuery(query) {
   return null;
 }
 
+function getTokenReorderCandidates(query) {
+  const tokens = normalizeToken(query).split(" ").filter(Boolean);
+  if (tokens.length < 2) return [];
+
+  const candidates = [];
+
+  // Most common user mismatch is swapped order (e.g. "yankees new york").
+  const reversed = [...tokens].reverse().join(" ");
+  candidates.push(reversed);
+
+  if (tokens.length >= 3) {
+    candidates.push(`${tokens.slice(1).join(" ")} ${tokens[0]}`);
+  }
+
+  return Array.from(new Set(candidates));
+}
+
+function getTokenSubsetCandidates(query) {
+  const tokens = normalizeToken(query)
+    .split(" ")
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 3);
+
+  if (tokens.length === 0) return [];
+
+  const candidates = [];
+
+  // Use full query first, then likely useful subsets.
+  candidates.push(tokens.join(" "));
+
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    if (!token) continue;
+    candidates.push(token);
+  }
+
+  if (tokens.length >= 2) {
+    for (let index = 0; index < tokens.length - 1; index += 1) {
+      candidates.push(`${tokens[index]} ${tokens[index + 1]}`);
+    }
+  }
+
+  return Array.from(new Set(candidates));
+}
+
 function uniqueByEventId(events) {
   const seen = new Set();
   const unique = [];
@@ -143,6 +189,131 @@ function uniqueByEventId(events) {
   return unique;
 }
 
+function toPerformerKey(event) {
+  const name = normalizeToken(event?.Name);
+  if (!name) return "";
+  return name.split(" ").slice(0, 4).join(" ");
+}
+
+function diversifyByPerformer(events) {
+  const groups = new Map();
+  let unnamedCounter = 0;
+  for (const event of events) {
+    const performerKey = toPerformerKey(event);
+    const fallbackKey = event?.ID != null ? `event-${event.ID}` : `event-unknown-${unnamedCounter++}`;
+    const key = performerKey || fallbackKey;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(event);
+  }
+  const queue = Array.from(groups.entries());
+  const diversified = [];
+  while (queue.length > 0) {
+    for (let index = 0; index < queue.length; index += 1) {
+      const bucket = queue[index][1];
+      if (bucket.length > 0) diversified.push(bucket.shift());
+    }
+    for (let index = queue.length - 1; index >= 0; index -= 1) {
+      if (queue[index][1].length === 0) queue.splice(index, 1);
+    }
+  }
+  return diversified;
+}
+
+function isTributeLikeName(name) {
+  const normalizedName = normalizeToken(name);
+  if (!normalizedName) return false;
+
+  return [
+    " tribute",
+    "tribute ",
+    "candlelight",
+    "featuring the music of",
+    "the music of",
+    "experience",
+  ].some((token) => normalizedName.includes(token));
+}
+
+function scoreSearchResult(event, query) {
+  const normalizedQuery = normalizeToken(query);
+  const normalizedName = normalizeToken(event?.Name);
+  const normalizedVenue = normalizeToken(event?.Venue);
+  const normalizedCity = normalizeToken(event?.City);
+
+  if (!normalizedQuery || !normalizedName) return Number.NEGATIVE_INFINITY;
+
+  let score = 0;
+
+  if (normalizedName === normalizedQuery) score += 120;
+  if (normalizedName.startsWith(normalizedQuery)) score += 80;
+  if (normalizedName.includes(normalizedQuery)) score += 45;
+  if (normalizedVenue.includes(normalizedQuery)) score += 12;
+  if (normalizedCity === normalizedQuery) score += 10;
+
+  const queryTokens = normalizedQuery.split(" ").filter(Boolean);
+  const matchedTokens = queryTokens.filter((token) => normalizedName.includes(token)).length;
+  score += matchedTokens * 8;
+
+  if (queryTokens.length > 1 && matchedTokens === queryTokens.length) {
+    score += 25;
+  }
+
+  if (isTributeLikeName(event?.Name) && normalizedName !== normalizedQuery) {
+    score -= 30;
+  }
+
+  return score;
+}
+
+function sortSearchResults(events, query) {
+  return [...events].sort((firstEvent, secondEvent) => {
+    const byScore = scoreSearchResult(secondEvent, query) - scoreSearchResult(firstEvent, query);
+    if (byScore !== 0) return byScore;
+
+    const byDate = toEventTimestamp(firstEvent) - toEventTimestamp(secondEvent);
+    if (byDate !== 0) return byDate;
+
+    return compareEventNames(firstEvent, secondEvent);
+  });
+}
+
+function isStrongQueryMatch(event, query) {
+  const normalizedQuery = normalizeToken(query);
+  const normalizedName = normalizeToken(event?.Name);
+
+  if (!normalizedQuery || !normalizedName) return false;
+
+  const queryTokens = normalizedQuery.split(" ").filter(Boolean);
+  if (queryTokens.length === 0) return false;
+
+  const matchedTokens = queryTokens.filter((token) => normalizedName.includes(token)).length;
+  const hasFullPhrase = normalizedName.includes(normalizedQuery);
+
+  return hasFullPhrase || matchedTokens === queryTokens.length;
+}
+
+function shouldPreferChronologicalResults(events, query) {
+  const normalizedQuery = normalizeToken(query);
+  if (!normalizedQuery || events.length < 2) return false;
+
+  const queryTokens = normalizedQuery.split(" ").filter(Boolean);
+  if (queryTokens.length < 2 && normalizedQuery.length < 8) return false;
+
+  const strongMatches = events.filter((event) => isStrongQueryMatch(event, query));
+  const strongMatchRatio = strongMatches.length / events.length;
+
+  return strongMatches.length >= 3 && strongMatchRatio >= 0.6;
+}
+
+function finalizeSearchResults(events, query) {
+  const rankedEvents = sortSearchResults(events, query);
+
+  if (shouldPreferChronologicalResults(rankedEvents, query)) {
+    return sortEventsForListing(rankedEvents);
+  }
+
+  return diversifyByPerformer(rankedEvents);
+}
+
 function toSearchItem(event) {
   return {
     ID: event?.ID,
@@ -151,6 +322,7 @@ function toSearchItem(event) {
     City: event?.City,
     StateProvince: event?.StateProvince,
     DisplayDate: event?.DisplayDate || event?.Date,
+    MapURL: event?.MapURL,
   };
 }
 
@@ -185,7 +357,6 @@ async function runSearch(params) {
   const sourceFetchCount = Math.min(Math.max(requestedCount * 4, requestedCount), 200);
 
   const response = await getEvents({
-    orderByClause: "Name ASC",
     ...params,
     numberOfEvents: sourceFetchCount,
   });
@@ -292,9 +463,59 @@ export async function GET(request) {
           correctedQuery = cleaned;
         }
       }
+
+      if (events.length === 0) {
+        const reorderCandidates = getTokenReorderCandidates(cleaned || query);
+
+        for (const candidate of reorderCandidates) {
+          if (!candidate || candidate.toLowerCase() === query.toLowerCase()) continue;
+
+          const reorderedSearch = await runSearch({
+            eventName: candidate,
+            performerName: candidate,
+            cityZip: city || undefined,
+            numberOfEvents,
+          });
+
+          events = uniqueByEventId([...events, ...reorderedSearch.events]);
+          parseError = parseError || reorderedSearch.response.parseError;
+
+          if (reorderedSearch.events.length > 0) {
+            fallbackUsed = true;
+            fallbackStrategy = "token-reorder";
+            correctedQuery = candidate;
+            break;
+          }
+        }
+      }
+
+      if (events.length === 0) {
+        const subsetCandidates = getTokenSubsetCandidates(cleaned || query);
+
+        for (const candidate of subsetCandidates) {
+          if (!candidate || candidate.toLowerCase() === query.toLowerCase()) continue;
+
+          const subsetSearch = await runSearch({
+            eventName: candidate,
+            performerName: candidate,
+            cityZip: city || undefined,
+            numberOfEvents,
+          });
+
+          events = uniqueByEventId([...events, ...subsetSearch.events]);
+          parseError = parseError || subsetSearch.response.parseError;
+
+          if (subsetSearch.events.length > 0) {
+            fallbackUsed = true;
+            fallbackStrategy = "token-subset";
+            correctedQuery = candidate;
+            break;
+          }
+        }
+      }
     }
 
-    events = sortEventsForListing(events).map(toSearchItem);
+    events = finalizeSearchResults(events, query).map(toSearchItem);
 
     const payload = {
       result: events,

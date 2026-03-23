@@ -36,12 +36,22 @@ function compareEventNames(firstEvent, secondEvent) {
   return firstName.localeCompare(secondName, "en", { sensitivity: "base" });
 }
 
-function sortEventsForListing(events) {
-  return [...events].sort((firstEvent, secondEvent) => {
-    const byName = compareEventNames(firstEvent, secondEvent);
-    if (byName !== 0) return byName;
+function sortEventsForListing(events, { city, cityScope } = {}) {
+  const normalizedCity = cityScope === "city" ? normalizeToken(city) : "";
 
-    return toEventTimestamp(firstEvent) - toEventTimestamp(secondEvent);
+  return [...events].sort((firstEvent, secondEvent) => {
+    if (normalizedCity) {
+      const firstIsCityMatch = normalizeToken(firstEvent?.City) === normalizedCity;
+      const secondIsCityMatch = normalizeToken(secondEvent?.City) === normalizedCity;
+      if (firstIsCityMatch !== secondIsCityMatch) {
+        return firstIsCityMatch ? -1 : 1;
+      }
+    }
+
+    const byDate = toEventTimestamp(firstEvent) - toEventTimestamp(secondEvent);
+    if (byDate !== 0) return byDate;
+
+    return compareEventNames(firstEvent, secondEvent);
   });
 }
 
@@ -81,21 +91,35 @@ function toPerformerKey(event) {
 }
 
 function diversifyByPerformer(events) {
-  const uniqueHeadliners = [];
-  const repeatedHeadliners = [];
-  const seen = new Set();
+  const groups = new Map();
+  let unnamedCounter = 0;
 
   for (const event of events) {
-    const key = toPerformerKey(event);
-    if (!key || !seen.has(key)) {
-      if (key) seen.add(key);
-      uniqueHeadliners.push(event);
-    } else {
-      repeatedHeadliners.push(event);
+    const performerKey = toPerformerKey(event);
+    const fallbackKey = event?.ID != null ? `event-${event.ID}` : `event-unknown-${unnamedCounter++}`;
+    const key = performerKey || fallbackKey;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(event);
+  }
+
+  const queue = Array.from(groups.entries());
+  const diversified = [];
+
+  while (queue.length > 0) {
+    for (let index = 0; index < queue.length; index += 1) {
+      const bucket = queue[index][1];
+      if (bucket.length > 0) {
+        diversified.push(bucket.shift());
+      }
+    }
+    for (let index = queue.length - 1; index >= 0; index -= 1) {
+      if (queue[index][1].length === 0) {
+        queue.splice(index, 1);
+      }
     }
   }
 
-  return [...uniqueHeadliners, ...repeatedHeadliners];
+  return diversified;
 }
 
 export async function GET(request) {
@@ -103,7 +127,6 @@ export async function GET(request) {
     const { searchParams } = new URL(request.url);
     const rawCount = Number.parseInt(searchParams.get("numberOfEvents") || "50", 10);
     const numberOfEvents = Number.isFinite(rawCount) && rawCount > 0 ? Math.min(rawCount, 200) : 50;
-    const sourceFetchCount = Math.min(Math.max(numberOfEvents * 4, numberOfEvents), 200);
 
     const rawParentCategoryID = searchParams.get("parentCategoryID");
     const parentCategoryID = rawParentCategoryID != null && rawParentCategoryID !== ""
@@ -120,7 +143,12 @@ export async function GET(request) {
     const cityScope = (searchParams.get("cityScope") || "").trim().toLowerCase();
     const diversifyParam = (searchParams.get("diversify") || "").trim().toLowerCase();
     const shouldDiversify = diversifyParam === "1" || diversifyParam === "true";
-    const orderByClause = (searchParams.get("orderBy") || "Name ASC").trim();
+    const orderByParam = (searchParams.get("orderBy") || "").trim();
+    const orderByClause = orderByParam || "Date ASC";
+    const shouldFetchWide = shouldDiversify || cityScope === "city" || Boolean(cityZip);
+    const sourceFetchCount = shouldFetchWide
+      ? 200
+      : Math.min(Math.max(numberOfEvents * 4, numberOfEvents), 200);
 
     const result = await getEvents({
       numberOfEvents: sourceFetchCount,
@@ -129,11 +157,10 @@ export async function GET(request) {
       cityZip,
       orderByClause,
     });
-    let events = sortEventsForListing(normalizeEvents(result.parsed?.result));
-
-    if (cityZip && cityScope === "city") {
-      events = prioritizeCityMatches(events, cityZip);
-    }
+    let events = sortEventsForListing(normalizeEvents(result.parsed?.result), {
+      city: cityZip,
+      cityScope,
+    });
 
     if (shouldDiversify) {
       events = diversifyByPerformer(events);

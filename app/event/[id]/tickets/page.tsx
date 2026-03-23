@@ -2,34 +2,24 @@ import Link from "next/link";
 import { headers } from "next/headers";
 import { baseUrl } from "@/lib/api";
 import { formatEventDate } from "@/lib/dateFormat";
+import { getEnv } from "@/lib/env";
 import EventSeatMap from "@/app/components/EventSeatMap";
-
-const PREFERRED_CHECKOUT_HOST = "checkout.ticketsbuzz.com";
 
 function sanitizeCheckoutDomain(value?: string) {
   const raw = String(value || "").trim();
-  if (!raw) return PREFERRED_CHECKOUT_HOST;
+  if (!raw) return "";
 
   try {
     const normalized = raw.includes("://") ? raw : `https://${raw}`;
     const parsed = new URL(normalized);
     const host = (parsed.hostname || "").toLowerCase();
 
-    if (!host || host.endsWith("etickets.ca")) {
-      return PREFERRED_CHECKOUT_HOST;
-    }
+    if (!host) return "";
 
     return host;
   } catch {
     const lower = raw.toLowerCase();
-
-    if (lower.includes("etickets.ca")) {
-      return PREFERRED_CHECKOUT_HOST;
-    }
-
-    return (
-      lower.replace(/^https?:\/\//, "").split("/")[0] || PREFERRED_CHECKOUT_HOST
-    );
+    return lower.replace(/^https?:\/\//, "").split("/")[0] || "";
   }
 }
 
@@ -39,18 +29,9 @@ function sanitizeCheckoutUrl(value?: string) {
 
   try {
     const parsed = new URL(raw);
-
-    if (!parsed.hostname.toLowerCase().endsWith("etickets.ca")) {
-      return raw;
-    }
-
-    parsed.protocol = "https:";
-    parsed.hostname = PREFERRED_CHECKOUT_HOST;
-    parsed.port = "";
-
     return parsed.toString();
   } catch {
-    return raw.replace(/checkout\.etickets\.ca/gi, PREFERRED_CHECKOUT_HOST);
+    return raw;
   }
 }
 
@@ -127,7 +108,7 @@ export default async function EventTicketsPage({
 
   const safeEvent = event;
 
-  const wcid = process.env.TN_WCID || "";
+  const wcid = getEnv("TN_WCID", "WCID");
   const ticketLink = `https://www.ticketnetwork.com/tickets/${safeEvent.ID}?wcid=${wcid}`;
 
   const enableExternalCheckout =
@@ -135,61 +116,47 @@ export default async function EventTicketsPage({
 
   const c2CheckoutUrl = isLocalRequest
     ? sanitizeCheckoutUrl(
-        process.env.TN_SEATICS_CHECKOUT_URL ||
-          process.env.NEXT_PUBLIC_TN_SEATICS_CHECKOUT_URL ||
-          "",
+        getEnv(
+          "TN_SEATICS_CHECKOUT_URL",
+          "NEXT_PUBLIC_TN_SEATICS_CHECKOUT_URL",
+        ),
       )
     : "";
 
   const envUseC3Checkout =
     (
-      process.env.TN_SEATICS_USE_C3 ||
-      process.env.NEXT_PUBLIC_TN_SEATICS_USE_C3 ||
-      ""
+      getEnv("TN_SEATICS_USE_C3", "NEXT_PUBLIC_TN_SEATICS_USE_C3")
     ).toLowerCase() === "true";
 
   const c3CheckoutDomain = sanitizeCheckoutDomain(
-    process.env.TN_SEATICS_C3_CHECKOUT_DOMAIN ||
-      process.env.NEXT_PUBLIC_TN_SEATICS_C3_CHECKOUT_DOMAIN ||
-      "",
+    getEnv(
+      "TN_SEATICS_C3_CHECKOUT_DOMAIN",
+      "NEXT_PUBLIC_TN_SEATICS_C3_CHECKOUT_DOMAIN",
+    ),
   );
 
-  const useC3Checkout = !isLocalRequest || envUseC3Checkout;
+  const useC3Checkout = envUseC3Checkout && Boolean(c3CheckoutDomain);
 
   const c3CurrencyCode =
-    process.env.TN_SEATICS_C3_CURRENCY_CODE ||
-    process.env.NEXT_PUBLIC_TN_SEATICS_C3_CURRENCY_CODE ||
-    "";
+    getEnv("TN_SEATICS_C3_CURRENCY_CODE", "NEXT_PUBLIC_TN_SEATICS_C3_CURRENCY_CODE");
 
   const c3UtmSource =
-    process.env.TN_SEATICS_C3_UTM_SOURCE ||
-    process.env.NEXT_PUBLIC_TN_SEATICS_C3_UTM_SOURCE ||
-    "";
+    getEnv("TN_SEATICS_C3_UTM_SOURCE", "NEXT_PUBLIC_TN_SEATICS_C3_UTM_SOURCE");
 
   const c3UtmMedium =
-    process.env.TN_SEATICS_C3_UTM_MEDIUM ||
-    process.env.NEXT_PUBLIC_TN_SEATICS_C3_UTM_MEDIUM ||
-    "";
+    getEnv("TN_SEATICS_C3_UTM_MEDIUM", "NEXT_PUBLIC_TN_SEATICS_C3_UTM_MEDIUM");
 
   const c3UtmCampaign =
-    process.env.TN_SEATICS_C3_UTM_CAMPAIGN ||
-    process.env.NEXT_PUBLIC_TN_SEATICS_C3_UTM_CAMPAIGN ||
-    "";
+    getEnv("TN_SEATICS_C3_UTM_CAMPAIGN", "NEXT_PUBLIC_TN_SEATICS_C3_UTM_CAMPAIGN");
 
   const c3UtmContent =
-    process.env.TN_SEATICS_C3_UTM_CONTENT ||
-    process.env.NEXT_PUBLIC_TN_SEATICS_C3_UTM_CONTENT ||
-    "";
+    getEnv("TN_SEATICS_C3_UTM_CONTENT", "NEXT_PUBLIC_TN_SEATICS_C3_UTM_CONTENT");
 
   const c3UtmTerm =
-    process.env.TN_SEATICS_C3_UTM_TERM ||
-    process.env.NEXT_PUBLIC_TN_SEATICS_C3_UTM_TERM ||
-    "";
+    getEnv("TN_SEATICS_C3_UTM_TERM", "NEXT_PUBLIC_TN_SEATICS_C3_UTM_TERM");
 
   const c3PromoCode =
-    process.env.TN_SEATICS_C3_PROMO_CODE ||
-    process.env.NEXT_PUBLIC_TN_SEATICS_C3_PROMO_CODE ||
-    "";
+    getEnv("TN_SEATICS_C3_PROMO_CODE", "NEXT_PUBLIC_TN_SEATICS_C3_PROMO_CODE");
 
   const forceScriptMode = false;
 

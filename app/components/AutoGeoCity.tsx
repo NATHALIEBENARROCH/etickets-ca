@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 type AutoGeoCityProps = {
   hasCity: boolean;
@@ -9,9 +9,36 @@ type AutoGeoCityProps = {
 
 export default function AutoGeoCity({ hasCity }: AutoGeoCityProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const [status, setStatus] = useState<"idle" | "detecting" | "denied" | "unsupported" | "insecure" | "error">("idle");
   const requestedRef = useRef(false);
+
+  const applyCity = useCallback((rawCity: string) => {
+    const city = String(rawCity || "").trim();
+    if (!city) return false;
+
+    const params = new URLSearchParams(searchParams?.toString() || "");
+    params.set("city", city);
+    const targetPath = pathname || "/";
+    router.replace(`${targetPath}?${params.toString()}`, { scroll: false });
+    return true;
+  }, [pathname, router, searchParams]);
+
+  const detectCityByIp = useCallback(async () => {
+    try {
+      const response = await fetch("/api/location/city", {
+        headers: { Accept: "application/json" },
+      });
+      if (!response.ok) return false;
+
+      const payload = await response.json();
+      const city = String(payload?.city || payload?.region || "").trim();
+      return applyCity(city);
+    } catch {
+      return false;
+    }
+  }, [applyCity]);
 
   const requestLocation = useCallback(() => {
     if (hasCity) return;
@@ -20,11 +47,13 @@ export default function AutoGeoCity({ hasCity }: AutoGeoCityProps) {
 
     if (!window.isSecureContext) {
       setStatus("insecure");
+      void detectCityByIp();
       return;
     }
 
     if (!("geolocation" in navigator)) {
       setStatus("unsupported");
+      void detectCityByIp();
       return;
     }
 
@@ -59,18 +88,19 @@ export default function AutoGeoCity({ hasCity }: AutoGeoCityProps) {
 
           if (!city) {
             setStatus("error");
+            void detectCityByIp();
             return;
           }
 
-          const params = new URLSearchParams(searchParams?.toString() || "");
-          params.set("city", city);
-          router.replace(`/?${params.toString()}`, { scroll: false });
+          applyCity(city);
         } catch {
           setStatus("error");
+          void detectCityByIp();
         }
       },
       () => {
         setStatus("denied");
+        void detectCityByIp();
       },
       {
         enableHighAccuracy: false,
@@ -78,7 +108,7 @@ export default function AutoGeoCity({ hasCity }: AutoGeoCityProps) {
         maximumAge: 600000,
       },
     );
-  }, [hasCity, router, searchParams]);
+  }, [applyCity, detectCityByIp, hasCity]);
 
   useEffect(() => {
     if (hasCity) return;

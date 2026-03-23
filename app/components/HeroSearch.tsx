@@ -131,6 +131,7 @@ const styles: Record<string, React.CSSProperties> = {
     position: "relative",
     width: "min(920px, 92vw)",
     marginTop: 14,
+    zIndex: 30,
   },
   form: {
     display: "flex",
@@ -194,7 +195,8 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: 14,
     border: "1px solid rgba(17,17,17,0.1)",
     boxShadow: "0 14px 32px rgba(0,0,0,0.18)",
-    overflow: "hidden",
+    overflowY: "auto",
+    maxHeight: 320,
     zIndex: 60,
   },
   suggestItem: {

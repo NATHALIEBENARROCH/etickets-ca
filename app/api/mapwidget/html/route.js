@@ -1,22 +1,20 @@
+import { getEnv, normalizeEnvValue } from "@/lib/env";
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const PREFERRED_CHECKOUT_HOST = "checkout.ticketsbuzz.com";
-
 function sanitizeCheckoutDomain(value) {
   const raw = String(value || "").trim();
-  if (!raw) return PREFERRED_CHECKOUT_HOST;
+  if (!raw) return "";
 
   try {
     const normalized = raw.includes("://") ? raw : `https://${raw}`;
     const parsed = new URL(normalized);
     const host = (parsed.hostname || "").toLowerCase();
-    if (!host || host.endsWith("etickets.ca")) return PREFERRED_CHECKOUT_HOST;
+    if (!host) return "";
     return host;
   } catch {
-    const lower = raw.toLowerCase();
-    if (lower.includes("etickets.ca")) return PREFERRED_CHECKOUT_HOST;
-    return lower.replace(/^https?:\/\//, "").split("/")[0] || PREFERRED_CHECKOUT_HOST;
+    return raw.toLowerCase().replace(/^https?:\/\//, "").split("/")[0] || "";
   }
 }
 
@@ -26,13 +24,9 @@ function sanitizeCheckoutUrl(value) {
 
   try {
     const parsed = new URL(raw);
-    if (!parsed.hostname.toLowerCase().endsWith("etickets.ca")) return raw;
-    parsed.protocol = "https:";
-    parsed.hostname = PREFERRED_CHECKOUT_HOST;
-    parsed.port = "";
     return parsed.toString();
   } catch {
-    return raw.replace(/checkout\.etickets\.ca/gi, PREFERRED_CHECKOUT_HOST);
+    return raw;
   }
 }
 
@@ -41,36 +35,36 @@ export async function GET(request) {
   const requestHost = (requestUrl.hostname || "").toLowerCase();
   const isLocalRequest = requestHost === "localhost" || requestHost === "127.0.0.1";
   const { searchParams } = new URL(request.url);
-  const eventId = (searchParams.get("eventId") || "").trim();
-  const websiteConfigId = (searchParams.get("websiteConfigId") || "").trim();
-  const userAgent = (searchParams.get("userAgent") || "TicketsBuzz").trim();
+  const eventId = normalizeEnvValue(searchParams.get("eventId") || "");
+  const websiteConfigId = normalizeEnvValue(searchParams.get("websiteConfigId") || "");
+  const userAgent = normalizeEnvValue(searchParams.get("userAgent") || "TicketsBuzz");
   const useDarkTheme = (searchParams.get("useDarkTheme") || "").trim().toLowerCase() === "true";
   const forceMapOpen = (searchParams.get("forceMapOpen") || "true").trim().toLowerCase() !== "false";
-  const ticketUrl = (searchParams.get("ticketUrl") || "").trim();
+  const ticketUrl = normalizeEnvValue(searchParams.get("ticketUrl") || "");
 
   const c2CheckoutUrl = isLocalRequest
     ? sanitizeCheckoutUrl(
-        process.env.TN_SEATICS_CHECKOUT_URL || process.env.NEXT_PUBLIC_TN_SEATICS_CHECKOUT_URL || "",
+        getEnv("TN_SEATICS_CHECKOUT_URL", "NEXT_PUBLIC_TN_SEATICS_CHECKOUT_URL"),
       )
     : "";
-  const envUseC3Checkout = (process.env.TN_SEATICS_USE_C3 || process.env.NEXT_PUBLIC_TN_SEATICS_USE_C3 || "").trim().toLowerCase() === "true";
-  const useC3Checkout = !isLocalRequest || envUseC3Checkout;
+  const envUseC3Checkout = getEnv("TN_SEATICS_USE_C3", "NEXT_PUBLIC_TN_SEATICS_USE_C3").toLowerCase() === "true";
+  const useC3Checkout = isLocalRequest ? true : envUseC3Checkout;
   const configuredC3CheckoutDomain = sanitizeCheckoutDomain(
-    process.env.TN_SEATICS_C3_CHECKOUT_DOMAIN || process.env.NEXT_PUBLIC_TN_SEATICS_C3_CHECKOUT_DOMAIN || "",
+    getEnv("TN_SEATICS_C3_CHECKOUT_DOMAIN", "NEXT_PUBLIC_TN_SEATICS_C3_CHECKOUT_DOMAIN"),
   );
-  const c3CheckoutDomain = !isLocalRequest
-    ? (configuredC3CheckoutDomain || PREFERRED_CHECKOUT_HOST)
+  const c3CheckoutDomain = isLocalRequest
+    ? configuredC3CheckoutDomain || "checkout.tickettransaction.com"
     : configuredC3CheckoutDomain;
-  const c3CurrencyCode = (process.env.TN_SEATICS_C3_CURRENCY_CODE || process.env.NEXT_PUBLIC_TN_SEATICS_C3_CURRENCY_CODE || "").trim();
-  const c3UtmSource = (process.env.TN_SEATICS_C3_UTM_SOURCE || process.env.NEXT_PUBLIC_TN_SEATICS_C3_UTM_SOURCE || "").trim();
-  const c3UtmMedium = (process.env.TN_SEATICS_C3_UTM_MEDIUM || process.env.NEXT_PUBLIC_TN_SEATICS_C3_UTM_MEDIUM || "").trim();
-  const c3UtmCampaign = (process.env.TN_SEATICS_C3_UTM_CAMPAIGN || process.env.NEXT_PUBLIC_TN_SEATICS_C3_UTM_CAMPAIGN || "").trim();
-  const c3UtmContent = (process.env.TN_SEATICS_C3_UTM_CONTENT || process.env.NEXT_PUBLIC_TN_SEATICS_C3_UTM_CONTENT || "").trim();
-  const c3UtmTerm = (process.env.TN_SEATICS_C3_UTM_TERM || process.env.NEXT_PUBLIC_TN_SEATICS_C3_UTM_TERM || "").trim();
-  const c3PromoCode = (process.env.TN_SEATICS_C3_PROMO_CODE || process.env.NEXT_PUBLIC_TN_SEATICS_C3_PROMO_CODE || "").trim();
+  const c3CurrencyCode = getEnv("TN_SEATICS_C3_CURRENCY_CODE", "NEXT_PUBLIC_TN_SEATICS_C3_CURRENCY_CODE");
+  const c3UtmSource = getEnv("TN_SEATICS_C3_UTM_SOURCE", "NEXT_PUBLIC_TN_SEATICS_C3_UTM_SOURCE");
+  const c3UtmMedium = getEnv("TN_SEATICS_C3_UTM_MEDIUM", "NEXT_PUBLIC_TN_SEATICS_C3_UTM_MEDIUM");
+  const c3UtmCampaign = getEnv("TN_SEATICS_C3_UTM_CAMPAIGN", "NEXT_PUBLIC_TN_SEATICS_C3_UTM_CAMPAIGN");
+  const c3UtmContent = getEnv("TN_SEATICS_C3_UTM_CONTENT", "NEXT_PUBLIC_TN_SEATICS_C3_UTM_CONTENT");
+  const c3UtmTerm = getEnv("TN_SEATICS_C3_UTM_TERM", "NEXT_PUBLIC_TN_SEATICS_C3_UTM_TERM");
+  const c3PromoCode = getEnv("TN_SEATICS_C3_PROMO_CODE", "NEXT_PUBLIC_TN_SEATICS_C3_PROMO_CODE");
   const effectiveC3CurrencyCode = c3CurrencyCode || "USD";
   const forcedFallbackEventIds = new Set(
-    (process.env.TN_SEATICS_FALLBACK_EVENT_IDS || "")
+    getEnv("TN_SEATICS_FALLBACK_EVENT_IDS")
       .split(",")
       .map((value) => value.trim())
       .filter(Boolean),
@@ -143,6 +137,18 @@ export async function GET(request) {
     clearTimeout(upstreamTimeout);
   }
 
+  // Provider-side payloads may still include legacy checkout hosts per account settings.
+  // Normalize these hosts to the configured checkout domain before injecting the HTML.
+  if (c3CheckoutDomain) {
+    snippet = snippet.replace(/checkout\.etickets\.ca/gi, c3CheckoutDomain);
+
+    if (isLocalRequest) {
+      // Local-only hardening: catch escaped host strings and any checkout.* host literals.
+      snippet = snippet.replace(/checkout\\\.etickets\\\.ca/gi, c3CheckoutDomain.replace(/\./g, "\\\\."));
+      snippet = snippet.replace(/checkout\.[a-z0-9.-]+/gi, c3CheckoutDomain);
+    }
+  }
+
   if (!upstreamResponse.ok) {
     return new Response(snippet || `MapWidget HTML fetch failed (${upstreamResponse.status})`, {
       status: upstreamResponse.status,
@@ -194,17 +200,21 @@ export async function GET(request) {
 
     if (c2CheckoutUrl) {
       return `
+      window.Seatics.config.useC3 = false;
       window.Seatics.config.checkoutUrl = ${JSON.stringify(c2CheckoutUrl)};
       `;
     }
 
     if (ticketUrl) {
       return `
+      window.Seatics.config.useC3 = false;
       window.Seatics.config.checkoutUrl = ${JSON.stringify(ticketUrl)};
       `;
     }
 
-    return "";
+    return `
+      window.Seatics.config.useC3 = false;
+    `;
   })();
 
   const injectedStyle = `<style>
@@ -237,13 +247,29 @@ export async function GET(request) {
   const injectedScript = `<script>
     (function(){
       var configuredCheckoutDomain = ${JSON.stringify((c3CheckoutDomain || "").toLowerCase())};
-      var preferredCheckoutDomain = configuredCheckoutDomain || 'checkout.ticketsbuzz.com';
+      var preferredCheckoutDomain = configuredCheckoutDomain || 'checkout.tickettransaction.com';
 
       function normalizeCheckoutUrl(url){
         if (!url) return '';
         try {
           var parsed = new URL(url, window.location.href);
           var host = (parsed.hostname || '').toLowerCase();
+          var path = (parsed.pathname || '').toLowerCase();
+
+          if (preferredCheckoutDomain && host.indexOf('checkout.') === 0) {
+            parsed.protocol = 'https:';
+            parsed.hostname = preferredCheckoutDomain;
+            parsed.port = '';
+            return parsed.toString();
+          }
+
+          if (preferredCheckoutDomain && path.indexOf('/checkout') === 0) {
+            parsed.protocol = 'https:';
+            parsed.hostname = preferredCheckoutDomain;
+            parsed.port = '';
+            return parsed.toString();
+          }
+
           if (!host.endsWith('etickets.ca')) return parsed.toString();
 
           parsed.protocol = 'https:';
@@ -262,6 +288,8 @@ export async function GET(request) {
           var host = (parsed.hostname || '').toLowerCase();
           var path = (parsed.pathname || '').toLowerCase();
 
+          if (path.indexOf('/checkout') === 0) return true;
+
           if (configuredCheckoutDomain && host === configuredCheckoutDomain) return true;
           if (host.indexOf('checkout.') === 0) return true;
           if (host.indexOf('ticketnetwork.com') >= 0 && path.indexOf('checkout') >= 0) return true;
@@ -275,6 +303,26 @@ export async function GET(request) {
       function forceCheckoutToTop(){
         var nativeSubmitPatched = false;
 
+        function forceTopNavigation(url){
+          if (!url) return;
+          var normalized = normalizeCheckoutUrl(url);
+          try {
+            if (window.top && window.top !== window) {
+              window.top.location.href = normalized;
+            } else {
+              window.location.href = normalized;
+            }
+          } catch (e) {
+            window.location.href = normalized;
+          }
+        }
+
+        function looksLikeCheckoutPath(url){
+          if (!url) return false;
+          var raw = String(url).toLowerCase();
+          return raw.indexOf('/checkout/order') >= 0 || raw.indexOf('/checkout') >= 0;
+        }
+
         function patchNativeSubmit(){
           if (nativeSubmitPatched) return;
           if (!window.HTMLFormElement || !window.HTMLFormElement.prototype) return;
@@ -285,10 +333,12 @@ export async function GET(request) {
           window.HTMLFormElement.prototype.submit = function(){
             try {
               var action = this.getAttribute('action') || this.action || '';
-              if (isCheckoutLikeUrl(action)) {
+              if (isCheckoutLikeUrl(action) || looksLikeCheckoutPath(action)) {
                 var normalizedAction = normalizeCheckoutUrl(action);
                 if (normalizedAction) this.setAttribute('action', normalizedAction);
                 this.setAttribute('target', '_top');
+                // Preserve provider POST/session payload by allowing native submit.
+                return originalSubmit.apply(this, arguments);
               }
             } catch (e) {}
 
@@ -326,7 +376,7 @@ export async function GET(request) {
           var form = event.target;
           if (!form || form.tagName !== 'FORM') return;
           var action = form.getAttribute('action') || '';
-          if (!isCheckoutLikeUrl(action)) return;
+          if (!isCheckoutLikeUrl(action) && !looksLikeCheckoutPath(action)) return;
           var normalizedAction = normalizeCheckoutUrl(action);
           if (normalizedAction) {
             form.setAttribute('action', normalizedAction);
@@ -341,18 +391,32 @@ export async function GET(request) {
           while (node && node !== document.body) {
             if (node.tagName === 'A') {
               var href = node.getAttribute('href') || '';
-              if (isCheckoutLikeUrl(href)) {
+              if (isCheckoutLikeUrl(href) || looksLikeCheckoutPath(href)) {
                 var normalizedHref = normalizeCheckoutUrl(href);
                 if (normalizedHref) {
                   node.setAttribute('href', normalizedHref);
                 }
                 node.setAttribute('target', '_top');
+                node.setAttribute('rel', 'noreferrer noopener');
                 return;
               }
             }
             node = node.parentElement;
           }
         }, true);
+
+        try {
+          var originalOpen = window.open;
+          if (typeof originalOpen === 'function') {
+            window.open = function(url){
+              if (isCheckoutLikeUrl(url) || looksLikeCheckoutPath(url)) {
+                forceTopNavigation(url);
+                return null;
+              }
+              return originalOpen.apply(window, arguments);
+            };
+          }
+        } catch (e) {}
 
         var checkoutObserver = new MutationObserver(function(){ promoteCheckoutIframes(); });
         checkoutObserver.observe(document.documentElement || document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['src'] });

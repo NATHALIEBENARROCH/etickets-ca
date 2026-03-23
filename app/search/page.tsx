@@ -2,6 +2,7 @@ import Link from "next/link";
 import { headers } from "next/headers";
 import { baseUrl } from "@/lib/api";
 import { formatEventDate } from "@/lib/dateFormat";
+import EventCardImage from "@/app/components/EventCardImage";
 
 type EventItem = {
   id?: string | number;
@@ -15,7 +16,39 @@ type EventItem = {
   City?: string;
   date?: string;
   DisplayDate?: string;
+  MapURL?: string;
 };
+
+function resolveEventImageCandidates(event: EventItem) {
+  const raw = (event.MapURL || "").trim();
+  const artistName = (event.Name ?? event.name ?? event.eventName ?? "").trim();
+  const artistPhoto = artistName
+    ? `/api/artist-photo?name=${encodeURIComponent(artistName)}`
+    : "";
+
+  if (!raw) {
+    return [artistPhoto, "/hero.png"].filter(Boolean);
+  }
+
+  const normalized = raw.toLowerCase();
+  const hasGenericMapKeyword = [
+    "generaladmissionevent",
+    "seat",
+    "seating",
+    "venue",
+    "map",
+    "chart",
+    "floorplan",
+  ].some((keyword) => normalized.includes(keyword));
+
+  const secureMapUrl = raw.replace(/^http:\/\//i, "https://");
+
+  if (hasGenericMapKeyword || normalized.endsWith(".gif")) {
+    return [artistPhoto, secureMapUrl, "/hero.png"].filter(Boolean);
+  }
+
+  return [secureMapUrl, artistPhoto, "/hero.png"].filter(Boolean);
+}
 
 export default async function SearchPage({
   searchParams,
@@ -118,9 +151,15 @@ export default async function SearchPage({
             const city = e.City ?? e.city ?? "";
             const date = formatEventDate(e.DisplayDate ?? e.date);
             const id = e.ID ?? e.id ?? idx;
+            const imageSources = resolveEventImageCandidates(e);
 
             return (
               <div key={String(id)} style={styles.card}>
+                <EventCardImage
+                  sources={imageSources}
+                  alt={title}
+                  style={styles.cardImage}
+                />
                 <div style={styles.cardTitle}>{title}</div>
                 <div style={styles.cardMeta}>
                   {venue}
@@ -187,6 +226,15 @@ const styles: Record<string, React.CSSProperties> = {
       "linear-gradient(180deg, rgba(31,42,90,0.95), rgba(11,15,36,0.95))",
     border: "1px solid rgba(255,255,255,0.10)",
     boxShadow: "0 10px 30px rgba(0,0,0,0.25)",
+  },
+  cardImage: {
+    width: "100%",
+    height: 150,
+    objectFit: "cover",
+    borderRadius: 10,
+    border: "1px solid rgba(255,255,255,0.12)",
+    background: "rgba(255,255,255,0.06)",
+    marginBottom: 10,
   },
   cardTitle: { fontWeight: 900, fontSize: 16 },
   cardMeta: { marginTop: 6, opacity: 0.78, fontSize: 13, lineHeight: 1.35 },
