@@ -42,13 +42,24 @@ const NEARBY_CITY_CANDIDATES: Record<string, string[]> = {
   ottawa: ["Gatineau", "Montreal", "Kingston", "Cornwall"],
 };
 
-const DEFAULT_NEARBY_CITY_CANDIDATES = [
-  "Montreal",
-  "Quebec",
-  "Ottawa",
-  "Toronto",
-  "Vancouver",
-  "Calgary",
+const GLOBAL_FALLBACK_HUBS: Array<{ name: string; lat: number; lon: number }> = [
+  { name: "Santiago", lat: -33.4489, lon: -70.6693 },
+  { name: "Buenos Aires", lat: -34.6037, lon: -58.3816 },
+  { name: "Lima", lat: -12.0464, lon: -77.0428 },
+  { name: "Sao Paulo", lat: -23.5558, lon: -46.6396 },
+  { name: "Bogota", lat: 4.711, lon: -74.0721 },
+  { name: "Mexico City", lat: 19.4326, lon: -99.1332 },
+  { name: "Miami", lat: 25.7617, lon: -80.1918 },
+  { name: "Los Angeles", lat: 34.0522, lon: -118.2437 },
+  { name: "New York", lat: 40.7128, lon: -74.006 },
+  { name: "Toronto", lat: 43.6532, lon: -79.3832 },
+  { name: "Montreal", lat: 45.5017, lon: -73.5673 },
+  { name: "London", lat: 51.5072, lon: -0.1276 },
+  { name: "Paris", lat: 48.8566, lon: 2.3522 },
+  { name: "Madrid", lat: 40.4168, lon: -3.7038 },
+  { name: "Berlin", lat: 52.52, lon: 13.405 },
+  { name: "Tokyo", lat: 35.6762, lon: 139.6503 },
+  { name: "Sydney", lat: -33.8688, lon: 151.2093 },
 ];
 
 function normalizeCity(raw: string) {
@@ -78,12 +89,74 @@ function normalizeToken(value: string | undefined) {
     .trim();
 }
 
-function getNearbyCityCandidates(city: string) {
+function distanceInKm(
+  first: { lat: number; lon: number },
+  second: { lat: number; lon: number },
+) {
+  const toRadians = (value: number) => (value * Math.PI) / 180;
+  const earthRadiusKm = 6371;
+  const dLat = toRadians(second.lat - first.lat);
+  const dLon = toRadians(second.lon - first.lon);
+  const lat1 = toRadians(first.lat);
+  const lat2 = toRadians(second.lat);
+
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return earthRadiusKm * c;
+}
+
+async function geocodeCity(city: string) {
+  const query = city.trim();
+  if (!query) return null;
+
+  try {
+    const response = await fetch(
+      `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=${encodeURIComponent(query)}`,
+      {
+        headers: {
+          Accept: "application/json",
+          "User-Agent": "etickets-ca/1.0",
+        },
+        next: { revalidate: 86400 },
+      },
+    );
+
+    if (!response.ok) return null;
+
+    const data = (await response.json()) as Array<{ lat?: string; lon?: string }>;
+    const first = data?.[0];
+    const lat = Number.parseFloat(String(first?.lat || ""));
+    const lon = Number.parseFloat(String(first?.lon || ""));
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+    return { lat, lon };
+  } catch {
+    return null;
+  }
+}
+
+async function getNearbyCityCandidates(city: string) {
   const normalizedCity = normalizeToken(city);
   if (!normalizedCity) return [];
 
-  const canonical = NEARBY_CITY_CANDIDATES[normalizedCity] || DEFAULT_NEARBY_CITY_CANDIDATES;
-  return canonical.filter((candidate) => normalizeToken(candidate) !== normalizedCity);
+  const canonical = NEARBY_CITY_CANDIDATES[normalizedCity];
+  if (canonical?.length) {
+    return canonical.filter((candidate) => normalizeToken(candidate) !== normalizedCity);
+  }
+
+  const geocodedCity = await geocodeCity(city);
+  if (!geocodedCity) return [];
+
+  return [...GLOBAL_FALLBACK_HUBS]
+    .sort((first, second) => {
+      const firstDistance = distanceInKm(geocodedCity, { lat: first.lat, lon: first.lon });
+      const secondDistance = distanceInKm(geocodedCity, { lat: second.lat, lon: second.lon });
+      return firstDistance - secondDistance;
+    })
+    .map((hub) => hub.name)
+    .filter((candidate) => normalizeToken(candidate) !== normalizedCity)
+    .slice(0, 8);
 }
 
 function hasExactCityMatch(events: EventItem[], city: string) {
@@ -258,7 +331,7 @@ export default async function Home({
   let nearbyOk = true;
 
   if (activeCity && !hasExactLocalMatch) {
-    const nearbyCandidates = getNearbyCityCandidates(activeCity);
+    const nearbyCandidates = await getNearbyCityCandidates(activeCity);
     for (const nearbyCity of nearbyCandidates) {
       const nearbyFetch = await fetchEventList(
         `${currentOrigin}/api/events?numberOfEvents=8&city=${encodeURIComponent(nearbyCity)}&cityScope=city&diversify=1`,
