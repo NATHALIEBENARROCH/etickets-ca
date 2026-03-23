@@ -309,7 +309,7 @@ export default async function Home({
               style={styles.localGrid}
             >
               {eventsToShow.slice(0, 6).map((event) => {
-                const imageSources = resolveEventImageCandidates(event);
+                  const imageSources = resolveEventImageCandidates(event, { allowMapFallback: false });
                 return (
                   <Link
                     key={event.ID}

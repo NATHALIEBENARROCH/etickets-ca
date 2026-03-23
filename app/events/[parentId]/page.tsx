@@ -476,11 +476,12 @@ export default async function CategoryPage({
         <div style={{ display: "flex", gap: 12, marginTop: 10 }}>
           {filtered.length > limit && limit < MAX_LIMIT ? (
             <Link
-              href={`${buildCategoryHref(parentId, {
+              href={buildCategoryHref(parentId, {
                 limit: Math.min(limit + PAGE_STEP, MAX_LIMIT),
                 sub: activeSub !== "all" ? activeSub : undefined,
                 city: activeCity,
-              })}#results`}
+              })}
+              scroll={false}
             >
               Load more
             </Link>
@@ -488,11 +489,12 @@ export default async function CategoryPage({
 
           {limit > PAGE_STEP ? (
             <Link
-              href={`${buildCategoryHref(parentId, {
+              href={buildCategoryHref(parentId, {
                 limit: PAGE_STEP,
                 sub: activeSub !== "all" ? activeSub : undefined,
                 city: activeCity,
-              })}#results`}
+              })}
+              scroll={false}
             >
               Show less
             </Link>

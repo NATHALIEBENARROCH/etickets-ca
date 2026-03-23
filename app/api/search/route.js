@@ -360,8 +360,8 @@ async function runSearch(params) {
     ...params,
     numberOfEvents: sourceFetchCount,
   });
-  const events = sortEventsForListing(normalizeEvents(response.parsed?.result)).slice(0, requestedCount);
-  return { response, events };
+  const events = sortEventsForListing(normalizeEvents(response.parsed?.result));
+  return { response, events, requestedCount };
 }
 
 export async function GET(request) {
@@ -515,11 +515,14 @@ export async function GET(request) {
       }
     }
 
-    events = finalizeSearchResults(events, query).map(toSearchItem);
+    const finalizedEvents = finalizeSearchResults(events, query);
+    const totalCount = finalizedEvents.length;
+    events = finalizedEvents.slice(0, numberOfEvents).map(toSearchItem);
 
     const payload = {
       result: events,
-      count: events.length,
+      count: totalCount,
+      visibleCount: events.length,
       parseError,
       fallbackUsed,
       fallbackStrategy,

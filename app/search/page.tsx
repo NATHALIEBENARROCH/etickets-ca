@@ -32,7 +32,7 @@ function buildSearchHref(query: string, options: { city?: string; limit: number 
     params.set("city", options.city);
   }
 
-  return `/search?${params.toString()}#results`;
+  return `/search?${params.toString()}`;
 }
 
 export default async function SearchPage({
@@ -56,6 +56,7 @@ export default async function SearchPage({
   let errorMsg = "";
   let correctedQuery = "";
   let fallbackStrategy = "";
+  let totalCount = 0;
 
   try {
     if (q) {
@@ -70,10 +71,13 @@ export default async function SearchPage({
         const data = (await res.json()) as {
           result?: EventItem[];
           events?: EventItem[];
+          count?: number;
+          visibleCount?: number;
           correctedQuery?: string | null;
           fallbackStrategy?: string | null;
         };
         events = data.result ?? data.events ?? [];
+        totalCount = Number.isFinite(data.count) ? Number(data.count) : events.length;
         correctedQuery = (data.correctedQuery ?? "").trim();
         fallbackStrategy = (data.fallbackStrategy ?? "").trim();
       }
@@ -95,7 +99,8 @@ export default async function SearchPage({
       <p style={styles.meta}>
         Query: <b>{q || "(empty)"}</b>
         {city ? <> — City: <b>{city}</b></> : null}
-        {" — Results: "}<b>{q ? events.length : 0}</b>
+        {" — Results: "}<b>{q ? totalCount : 0}</b>
+        {q && totalCount > events.length ? <> <span style={styles.metaSecondary}>(showing {events.length})</span></> : null}
       </p>
 
       {!!correctedQuery && correctedQuery.toLowerCase() !== q.toLowerCase() && (
@@ -134,55 +139,55 @@ export default async function SearchPage({
 
       {q && !errorMsg && (
         <div id="results" style={styles.resultsBlock}>
-        <div style={styles.grid}>
-          {events.map((e, idx) => {
-            const title = e.Name ?? e.name ?? e.eventName ?? "Untitled event";
-            const venue = e.Venue ?? e.venueName ?? "";
-            const city = e.City ?? e.city ?? "";
-            const date = formatEventDate(e.DisplayDate ?? e.date);
-            const id = e.ID ?? e.id ?? idx;
-            const imageSources = resolveEventImageCandidates(e);
+          <div style={styles.grid}>
+            {events.map((e, idx) => {
+              const title = e.Name ?? e.name ?? e.eventName ?? "Untitled event";
+              const venue = e.Venue ?? e.venueName ?? "";
+              const city = e.City ?? e.city ?? "";
+              const date = formatEventDate(e.DisplayDate ?? e.date);
+              const id = e.ID ?? e.id ?? idx;
+              const imageSources = resolveEventImageCandidates(e);
 
-            return (
-              <div key={String(id)} style={styles.card}>
-                <EventCardImage
-                  sources={imageSources}
-                  alt={title}
-                  style={styles.cardImage}
-                />
-                <div style={styles.cardTitle}>{title}</div>
-                <div style={styles.cardMeta}>
-                  {venue}
-                  {venue && city ? " • " : ""}
-                  {city}
-                  {(venue || city) && date ? " • " : ""}
-                  {date}
-                </div>
-
-                {id != null && (
-                  <div style={{ marginTop: 10 }}>
-                    <Link href={`/event/${id}`} style={styles.cardLink}>
-                      View event →
-                    </Link>
+              return (
+                <div key={String(id)} style={styles.card}>
+                  <EventCardImage
+                    sources={imageSources}
+                    alt={title}
+                    style={styles.cardImage}
+                  />
+                  <div style={styles.cardTitle}>{title}</div>
+                  <div style={styles.cardMeta}>
+                    {venue}
+                    {venue && city ? " • " : ""}
+                    {city}
+                    {(venue || city) && date ? " • " : ""}
+                    {date}
                   </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-        <div style={styles.paginationRow}>
-          {events.length >= limit && limit < MAX_LIMIT ? (
-            <Link href={buildSearchHref(q, { city, limit: Math.min(limit + PAGE_STEP, MAX_LIMIT) })} style={styles.paginationLink}>
-              Load more
-            </Link>
-          ) : null}
 
-          {limit > PAGE_STEP ? (
-            <Link href={buildSearchHref(q, { city, limit: PAGE_STEP })} style={styles.paginationLink}>
-              Show less
-            </Link>
-          ) : null}
-        </div>
+                  {id != null && (
+                    <div style={{ marginTop: 10 }}>
+                      <Link href={`/event/${id}`} style={styles.cardLink}>
+                        View event →
+                      </Link>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          <div style={styles.paginationRow}>
+            {events.length >= limit && limit < MAX_LIMIT ? (
+              <Link href={buildSearchHref(q, { city, limit: Math.min(limit + PAGE_STEP, MAX_LIMIT) })} style={styles.paginationLink} scroll={false}>
+                Load more
+              </Link>
+            ) : null}
+
+            {limit > PAGE_STEP ? (
+              <Link href={buildSearchHref(q, { city, limit: PAGE_STEP })} style={styles.paginationLink} scroll={false}>
+                Show less
+              </Link>
+            ) : null}
+          </div>
         </div>
       )}
     </main>
@@ -215,6 +220,10 @@ const styles: Record<string, React.CSSProperties> = {
     maxWidth: 1100,
     margin: "0 auto 18px",
     opacity: 0.8,
+  },
+  metaSecondary: {
+    opacity: 0.8,
+    fontSize: 14,
   },
   grid: {
     maxWidth: 1100,
