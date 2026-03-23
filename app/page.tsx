@@ -27,6 +27,7 @@ const POPULAR_SEARCH_TERMS = [
 ];
 
 const NEARBY_CITY_CANDIDATES: Record<string, string[]> = {
+  "les eboulements": ["Montreal", "Quebec", "Levis", "Trois-Rivieres"],
   laval: ["Montreal", "Longueuil", "Brossard", "Laval"],
   montreal: ["Laval", "Longueuil", "Brossard", "Laval"],
   longueuil: ["Montreal", "Laval", "Brossard", "Quebec"],
@@ -40,6 +41,15 @@ const NEARBY_CITY_CANDIDATES: Record<string, string[]> = {
   edmonton: ["St. Albert", "Calgary", "Red Deer", "Leduc"],
   ottawa: ["Gatineau", "Montreal", "Kingston", "Cornwall"],
 };
+
+const DEFAULT_NEARBY_CITY_CANDIDATES = [
+  "Montreal",
+  "Quebec",
+  "Ottawa",
+  "Toronto",
+  "Vancouver",
+  "Calgary",
+];
 
 function normalizeCity(raw: string) {
   let city = (raw || "").trim().replace(/\+/g, " ");
@@ -72,7 +82,7 @@ function getNearbyCityCandidates(city: string) {
   const normalizedCity = normalizeToken(city);
   if (!normalizedCity) return [];
 
-  const canonical = NEARBY_CITY_CANDIDATES[normalizedCity] || [];
+  const canonical = NEARBY_CITY_CANDIDATES[normalizedCity] || DEFAULT_NEARBY_CITY_CANDIDATES;
   return canonical.filter((candidate) => normalizeToken(candidate) !== normalizedCity);
 }
 
