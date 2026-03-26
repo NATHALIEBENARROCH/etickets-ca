@@ -7,6 +7,7 @@ import { getCategoriesMasterList } from "@/lib/soapClient";
 import EventCardImage from "@/app/components/EventCardImage";
 import AutoGeoCity from "@/app/components/AutoGeoCity";
 import { resolveEventImageCandidates } from "@/lib/eventImages";
+import { resolveCountryProfile } from "@/lib/locationQuery";
 
 type EventItem = {
   ID: number;
@@ -131,22 +132,6 @@ function buildDynamicSubcategoryLabels(categories: CategoryItem[], parentId: num
   return labels;
 }
 
-async function detectCityByIpOnServer(currentOrigin: string) {
-  try {
-    const response = await fetch(`${currentOrigin}/api/location/city`, {
-      cache: "no-store",
-      headers: { Accept: "application/json" },
-    });
-    if (!response.ok) return "";
-
-    const payload = await response.json();
-    const city = String(payload?.city || "").trim();
-    return city;
-  } catch {
-    return "";
-  }
-}
-
 function normalizeCity(raw: string) {
   let city = (raw || "").trim().replace(/\+/g, " ");
   for (let index = 0; index < 3; index += 1) {
@@ -171,7 +156,43 @@ function normalizeToken(value: string) {
     .trim();
 }
 
-function buildCategoryHref(parentId: number, options: { limit: number; sub?: string; city?: string }) {
+const NEARBY_CITY_CANDIDATES: Record<string, string[]> = {
+  iquique: ["Antofagasta", "La Serena", "Santiago", "Concepcion"],
+  antofagasta: ["Iquique", "La Serena", "Santiago", "Concepcion"],
+  rancagua: ["Santiago", "Valparaiso", "Vina del Mar", "Concepcion"],
+  santiago: ["Valparaiso", "Vina del Mar", "Concepcion", "Rancagua"],
+  valparaiso: ["Santiago", "Vina del Mar", "Rancagua", "Concepcion"],
+  "vina del mar": ["Valparaiso", "Santiago", "Rancagua", "Concepcion"],
+  concepcion: ["Santiago", "Valparaiso", "Vina del Mar", "Rancagua"],
+  "les eboulements": ["Montreal", "Quebec", "Levis", "Trois-Rivieres"],
+  laval: ["Montreal", "Longueuil", "Brossard", "Laval"],
+  montreal: ["Laval", "Longueuil", "Brossard", "Laval"],
+  longueuil: ["Montreal", "Laval", "Brossard", "Quebec"],
+  brossard: ["Montreal", "Longueuil", "Laval", "Quebec"],
+  quebec: ["Levis", "Montreal", "Trois-Rivieres", "Sherbrooke"],
+  toronto: ["Mississauga", "North York", "Scarborough", "Hamilton"],
+  mississauga: ["Toronto", "North York", "Scarborough", "Hamilton"],
+  vancouver: ["Burnaby", "Richmond", "Surrey", "Victoria"],
+  burnaby: ["Vancouver", "Richmond", "Surrey", "Victoria"],
+  calgary: ["Airdrie", "Edmonton", "Red Deer", "Lethbridge"],
+  edmonton: ["St. Albert", "Calgary", "Red Deer", "Leduc"],
+  ottawa: ["Gatineau", "Montreal", "Kingston", "Cornwall"],
+};
+
+function hasExactCityMatch(events: EventItem[], city: string) {
+  const normalizedCity = normalizeToken(city);
+  if (!normalizedCity) return events.length > 0;
+  return events.some((event) => normalizeToken(event?.City || "") === normalizedCity);
+}
+
+function getNearbyCityCandidates(city: string) {
+  const normalizedCity = normalizeToken(city);
+  if (!normalizedCity) return [];
+  const canonical = NEARBY_CITY_CANDIDATES[normalizedCity] || [];
+  return canonical.filter((candidate) => normalizeToken(candidate) !== normalizedCity);
+}
+
+function buildCategoryHref(parentId: number, options: { limit: number; sub?: string; city?: string; dateFrom?: string }) {
   const params = new URLSearchParams();
   params.set("limit", String(options.limit));
 
@@ -181,6 +202,10 @@ function buildCategoryHref(parentId: number, options: { limit: number; sub?: str
 
   if (options.city) {
     params.set("city", options.city);
+  }
+
+  if (options.dateFrom) {
+    params.set("dateFrom", options.dateFrom);
   }
 
   return `/events/${parentId}?${params.toString()}`;
@@ -206,7 +231,7 @@ export default async function CategoryPage({
   searchParams,
 }: {
   params: Promise<{ parentId: string }> | { parentId: string };
-  searchParams?: Promise<{ limit?: string; sub?: string; city?: string }> | { limit?: string; sub?: string; city?: string };
+  searchParams?: Promise<{ limit?: string; sub?: string; city?: string; dateFrom?: string }> | { limit?: string; sub?: string; city?: string; dateFrom?: string };
 }) {
   const resolvedParams = await params;
   const parentId = Number(resolvedParams.parentId);
@@ -219,6 +244,7 @@ export default async function CategoryPage({
     : PAGE_STEP;
   const activeSub = (resolvedSearchParams?.sub || "all").trim().toLowerCase();
   const queryCity = normalizeCity(resolvedSearchParams?.city || "");
+  const queryDateFrom = String(resolvedSearchParams?.dateFrom || "").trim();
 
   const categoryLabelMap: Record<number, string> = {
     1: "Sports",
@@ -236,14 +262,10 @@ export default async function CategoryPage({
 
   const rawDetectedCity = (requestHeaders.get("x-vercel-ip-city") || "").trim();
   const detectedCity = normalizeCity(rawDetectedCity);
-  const shouldDetectCityByIp = !queryCity && !detectedCity;
-
-  const [ipDetectedCity, categoriesFetch] = await Promise.all([
-    shouldDetectCityByIp ? detectCityByIpOnServer(currentOrigin) : Promise.resolve(""),
-    getCategoriesMasterList().catch(() => null),
-  ]);
-
-  const activeCity = queryCity || detectedCity || normalizeCity(ipDetectedCity);
+  const categoriesFetch = await getCategoriesMasterList().catch(() => null);
+  const activeCity = queryCity || detectedCity;
+  const activeCountryProfile = resolveCountryProfile(activeCity);
+  const isCountryQuery = Boolean(activeCountryProfile);
   const dynamicSubcategoryLabels = buildDynamicSubcategoryLabels(
     normalizeCategories(categoriesFetch?.parsed?.result),
     parentId,
@@ -252,7 +274,13 @@ export default async function CategoryPage({
   const baseParams = new URLSearchParams();
   baseParams.set("parentCategoryID", String(parentId));
   baseParams.set("numberOfEvents", String(MAX_LIMIT));
-  if (activeCity) {
+  if (queryDateFrom) {
+    baseParams.set("dateFrom", queryDateFrom);
+  }
+  if (isCountryQuery && activeCountryProfile) {
+    baseParams.set("countryId", String(activeCountryProfile.countryId));
+    baseParams.set("countryScope", "country");
+  } else if (activeCity) {
     baseParams.set("city", activeCity);
     baseParams.set("cityScope", "city");
   }
@@ -260,23 +288,57 @@ export default async function CategoryPage({
   const baseFetch = await fetchEventList(`${currentOrigin}/api/events?${baseParams.toString()}`);
   const baseEvents = baseFetch.events;
   const normalizedActiveCity = normalizeToken(activeCity || "");
-  const hasStrictCityMatches = normalizedActiveCity
+  const hasStrictCityMatches = isCountryQuery
+    ? baseEvents.length > 0
+    : (normalizedActiveCity
     ? baseEvents.some((event) => normalizeToken(event?.City || "") === normalizedActiveCity)
-    : baseEvents.length > 0;
+    : baseEvents.length > 0);
+
+  let nearbyCityUsed = "";
+  let nearbyEvents: EventItem[] = [];
+  let nearbyOk = true;
+
+  if (!isCountryQuery && activeCity && !hasStrictCityMatches) {
+    const nearbyCandidates = getNearbyCityCandidates(activeCity);
+
+    for (const nearbyCity of nearbyCandidates) {
+      const nearbyParams = new URLSearchParams();
+      nearbyParams.set("parentCategoryID", String(parentId));
+      nearbyParams.set("numberOfEvents", String(MAX_LIMIT));
+      nearbyParams.set("city", nearbyCity);
+      nearbyParams.set("cityScope", "city");
+      if (queryDateFrom) nearbyParams.set("dateFrom", queryDateFrom);
+
+      const nearbyFetch = await fetchEventList(
+        `${currentOrigin}/api/events?${nearbyParams.toString()}`,
+      );
+
+      nearbyOk = nearbyOk && nearbyFetch.ok;
+
+      if (nearbyFetch.events.length > 0 && hasExactCityMatch(nearbyFetch.events, nearbyCity)) {
+        nearbyCityUsed = nearbyCity;
+        nearbyEvents = nearbyFetch.events;
+        break;
+      }
+    }
+  }
 
   const broadParams = new URLSearchParams();
   broadParams.set("parentCategoryID", String(parentId));
   broadParams.set("numberOfEvents", String(MAX_LIMIT));
+  if (queryDateFrom) {
+    broadParams.set("dateFrom", queryDateFrom);
+  }
 
-  const broadFetch = !hasStrictCityMatches
+  const broadFetch = !hasStrictCityMatches && nearbyEvents.length === 0
     ? await fetchEventList(`${currentOrigin}/api/events?${broadParams.toString()}`)
     : { events: [] as EventItem[], ok: true };
 
   const events = hasStrictCityMatches
     ? baseEvents
-    : (broadFetch.events.length > 0 ? broadFetch.events : baseEvents);
+    : (nearbyEvents.length > 0 ? nearbyEvents : (broadFetch.events.length > 0 ? broadFetch.events : baseEvents));
 
-  const usingBroadFallback = !hasStrictCityMatches && broadFetch.events.length > 0;
+  const usingBroadFallback = !hasStrictCityMatches && nearbyEvents.length === 0 && broadFetch.events.length > 0;
 
   if (events.length === 0 && !baseFetch.ok && !broadFetch.ok) {
     return (
@@ -315,7 +377,7 @@ export default async function CategoryPage({
   }
 
   const visibleEvents = filtered.slice(0, limit);
-  const locationText = activeCity || "your area";
+  const locationText = activeCountryProfile?.label || activeCity || "your area";
 
   return (
     <main style={{ padding: 40, fontFamily: "Arial" }}>
@@ -338,6 +400,14 @@ export default async function CategoryPage({
             style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ccc", minWidth: 220 }}
             autoComplete="address-level2"
           />
+          <label htmlFor="dateFrom" style={{ fontWeight: 700 }}>When</label>
+          <input
+            id="dateFrom"
+            name="dateFrom"
+            type="date"
+            defaultValue={queryDateFrom}
+            style={{ padding: "8px 10px", borderRadius: 8, border: "1px solid #ccc", minWidth: 220 }}
+          />
           <input type="hidden" name="limit" value={String(limit)} />
           {activeSub !== "all" ? <input type="hidden" name="sub" value={activeSub} /> : null}
           <button type="submit" style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid #111", background: "#111", color: "#fff", cursor: "pointer" }}>
@@ -352,7 +422,7 @@ export default async function CategoryPage({
 
       <div style={{ marginBottom: 16, display: "flex", gap: 8, flexWrap: "wrap" }}>
         <Link
-          href={buildCategoryHref(parentId, { limit, city: activeCity })}
+          href={buildCategoryHref(parentId, { limit, city: activeCity, dateFrom: queryDateFrom })}
           style={{
             padding: "7px 10px",
             borderRadius: 999,
@@ -369,7 +439,7 @@ export default async function CategoryPage({
         {availableSubcategories.map((sub) => (
           <Link
             key={sub}
-            href={buildCategoryHref(parentId, { limit, sub, city: activeCity })}
+            href={buildCategoryHref(parentId, { limit, sub, city: activeCity, dateFrom: queryDateFrom })}
             style={{
               padding: "7px 10px",
               borderRadius: 999,
@@ -480,6 +550,7 @@ export default async function CategoryPage({
                 limit: Math.min(limit + PAGE_STEP, MAX_LIMIT),
                 sub: activeSub !== "all" ? activeSub : undefined,
                 city: activeCity,
+                dateFrom: queryDateFrom,
               })}
               scroll={false}
             >
@@ -493,6 +564,7 @@ export default async function CategoryPage({
                 limit: PAGE_STEP,
                 sub: activeSub !== "all" ? activeSub : undefined,
                 city: activeCity,
+                dateFrom: queryDateFrom,
               })}
               scroll={false}
             >

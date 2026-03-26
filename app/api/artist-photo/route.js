@@ -1,7 +1,5 @@
 import { NextResponse } from "next/server";
 
-const FALLBACK_IMAGE = "/hero.png";
-
 function sanitizeName(value) {
   return (value || "")
     .replace(/\s*[-|•].*$/, "")
@@ -46,10 +44,8 @@ export async function GET(request) {
   const rawName = searchParams.get("name") || "";
   const name = sanitizeName(rawName);
 
-  const fallbackUrl = new URL(FALLBACK_IMAGE, request.url);
-
   if (!name) {
-    return NextResponse.redirect(fallbackUrl, 302);
+    return new NextResponse(null, { status: 404 });
   }
 
   try {
@@ -64,11 +60,19 @@ export async function GET(request) {
       if (imageUrl) break;
     }
 
-    const redirectTarget = imageUrl || fallbackUrl.toString();
-    const response = NextResponse.redirect(redirectTarget, 302);
+    if (!imageUrl) {
+      return new NextResponse(null, {
+        status: 404,
+        headers: {
+          "Cache-Control": "public, s-maxage=1800, stale-while-revalidate=86400",
+        },
+      });
+    }
+
+    const response = NextResponse.redirect(imageUrl, 302);
     response.headers.set("Cache-Control", "public, s-maxage=3600, stale-while-revalidate=86400");
     return response;
   } catch {
-    return NextResponse.redirect(fallbackUrl, 302);
+    return new NextResponse(null, { status: 404 });
   }
 }

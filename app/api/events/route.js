@@ -122,6 +122,21 @@ function diversifyByPerformer(events) {
   return diversified;
 }
 
+function parseDateInput(value) {
+  const cleaned = String(value || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(cleaned)) return "";
+  const parsed = new Date(`${cleaned}T00:00:00Z`);
+  if (Number.isNaN(parsed.getTime())) return "";
+  return cleaned;
+}
+
+function toSoapBoundary(date, boundary) {
+  if (!date) return undefined;
+  return boundary === "end"
+    ? `${date}T23:59:59`
+    : `${date}T00:00:00`;
+}
+
 export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -141,11 +156,32 @@ export async function GET(request) {
     const rawCity = (searchParams.get("city") || "").trim();
     const cityZip = rawCity || undefined;
     const cityScope = (searchParams.get("cityScope") || "").trim().toLowerCase();
+    const rawCountryId = Number.parseInt(searchParams.get("countryId") || "", 10);
+    const countryId = Number.isFinite(rawCountryId) && rawCountryId > 0 ? rawCountryId : undefined;
+    const countryScope = (searchParams.get("countryScope") || "").trim().toLowerCase();
     const diversifyParam = (searchParams.get("diversify") || "").trim().toLowerCase();
     const shouldDiversify = diversifyParam === "1" || diversifyParam === "true";
+    const dateFrom = parseDateInput(searchParams.get("dateFrom"));
+    const dateTo = parseDateInput(searchParams.get("dateTo"));
+
+    let beginDate = dateFrom;
+    let endDate = dateTo;
+    if (beginDate && endDate && beginDate > endDate) {
+      beginDate = dateTo;
+      endDate = dateFrom;
+    }
+
     const orderByParam = (searchParams.get("orderBy") || "").trim();
     const orderByClause = orderByParam || "Date ASC";
-    const shouldFetchWide = shouldDiversify || cityScope === "city" || Boolean(cityZip);
+    const whereClause = countryScope === "country" && countryId
+      ? `CountryID = ${countryId}`
+      : undefined;
+    const shouldFetchWide =
+      shouldDiversify ||
+      cityScope === "city" ||
+      countryScope === "country" ||
+      Boolean(cityZip) ||
+      Boolean(countryId);
     const sourceFetchCount = shouldFetchWide
       ? 200
       : Math.min(Math.max(numberOfEvents * 4, numberOfEvents), 200);
@@ -155,12 +191,19 @@ export async function GET(request) {
       parentCategoryID: Number.isFinite(parentCategoryID) ? parentCategoryID : undefined,
       childCategoryID: Number.isFinite(childCategoryID) ? childCategoryID : undefined,
       cityZip,
+      whereClause,
+      beginDate: toSoapBoundary(beginDate, "start"),
+      endDate: toSoapBoundary(endDate, "end"),
       orderByClause,
     });
     let events = sortEventsForListing(normalizeEvents(result.parsed?.result), {
       city: cityZip,
       cityScope,
     });
+
+    if (countryScope === "country" && countryId) {
+      events = events.filter((event) => Number.parseInt(String(event?.CountryID || ""), 10) === countryId);
+    }
 
     if (shouldDiversify) {
       events = diversifyByPerformer(events);

@@ -369,12 +369,13 @@ export async function GET(request) {
   const { searchParams } = new URL(request.url);
   const query = (searchParams.get("q") || "").trim();
   const city = (searchParams.get("city") || "").trim();
+  const dateFrom = (searchParams.get("dateFrom") || "").trim();
   const rawLimit = Number.parseInt(searchParams.get("limit") || "20", 10);
   const numberOfEvents = Number.isFinite(rawLimit) && rawLimit > 0
     ? Math.min(rawLimit, 200)
     : 20;
 
-  const cacheKey = `${query.toLowerCase()}|${city.toLowerCase()}|${numberOfEvents}`;
+  const cacheKey = `${query.toLowerCase()}|${city.toLowerCase()}|${dateFrom.toLowerCase()}|${numberOfEvents}`;
 
   if (!query) {
     return withCorsJson({ result: [], count: 0, parseError: null }, request);
@@ -394,6 +395,7 @@ export async function GET(request) {
       eventName: query,
       performerName: query,
       cityZip: city || undefined,
+      beginDate: dateFrom ? `${dateFrom}T00:00:00` : undefined,
       numberOfEvents,
     });
 
@@ -411,6 +413,7 @@ export async function GET(request) {
           eventName: cleaned,
           performerName: cleaned,
           cityZip: city || undefined,
+          beginDate: dateFrom ? `${dateFrom}T00:00:00` : undefined,
           numberOfEvents,
         });
 
@@ -432,6 +435,7 @@ export async function GET(request) {
             eventName: typoCorrected,
             performerName: typoCorrected,
             cityZip: city || undefined,
+            beginDate: dateFrom ? `${dateFrom}T00:00:00` : undefined,
             numberOfEvents,
           });
 
@@ -451,6 +455,7 @@ export async function GET(request) {
           cityZip: city || cleaned,
           venueName: cleaned,
           eventName: cleaned,
+          beginDate: dateFrom ? `${dateFrom}T00:00:00` : undefined,
           numberOfEvents,
         });
 
@@ -474,6 +479,7 @@ export async function GET(request) {
             eventName: candidate,
             performerName: candidate,
             cityZip: city || undefined,
+            beginDate: dateFrom ? `${dateFrom}T00:00:00` : undefined,
             numberOfEvents,
           });
 
@@ -499,6 +505,7 @@ export async function GET(request) {
             eventName: candidate,
             performerName: candidate,
             cityZip: city || undefined,
+            beginDate: dateFrom ? `${dateFrom}T00:00:00` : undefined,
             numberOfEvents,
           });
 

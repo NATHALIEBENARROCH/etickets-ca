@@ -20,6 +20,13 @@ body {
   display: none;
 }
 
+.tb-geo-card:hover .tb-geo-cta,
+.tb-geo-card:focus-visible .tb-geo-cta {
+  background: #0f172a !important;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.28) !important;
+  transform: translateY(-1px) !important;
+}
+
 @media (max-width: 860px) {
   .tb-geo-grid {
     display: flex !important;

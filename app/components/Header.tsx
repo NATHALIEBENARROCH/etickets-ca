@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 
 type HeaderProps = {
   /** Optional: prefill the search box (ex: on /search page) */
@@ -13,6 +14,7 @@ export default function Header({
   defaultQuery = "",
   showSearch = true,
 }: HeaderProps) {
+  const searchParams = useSearchParams();
   const [q, setQ] = useState(defaultQuery);
   const [suggestions, setSuggestions] = useState<
     Array<{
@@ -25,6 +27,17 @@ export default function Header({
   const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const trimmedQuery = useMemo(() => q.trim(), [q]);
+  const cityParam = (searchParams?.get("city") || "").trim();
+  const dateFromParam = (searchParams?.get("dateFrom") || "").trim();
+
+  const categoryQuery = new URLSearchParams({
+    ...(cityParam ? { city: cityParam } : {}),
+    ...(dateFromParam ? { dateFrom: dateFromParam } : {}),
+  }).toString();
+
+  const concertsHref = categoryQuery ? `/events/2?${categoryQuery}` : "/events/2";
+  const sportsHref = categoryQuery ? `/events/1?${categoryQuery}` : "/events/1";
+  const theatreHref = categoryQuery ? `/events/3?${categoryQuery}` : "/events/3";
 
   useEffect(() => {
     let isCancelled = false;
@@ -85,13 +98,13 @@ export default function Header({
     <header style={styles.header}>
       <nav style={styles.nav}>
         <div style={styles.navLeft}>
-          <Link href="/events/2" style={styles.navLink}>
+          <Link href={concertsHref} style={styles.navLink}>
             Concerts
           </Link>
-          <Link href="/events/1" style={styles.navLink}>
+          <Link href={sportsHref} style={styles.navLink}>
             Sports
           </Link>
-          <Link href="/events/3" style={styles.navLink}>
+          <Link href={theatreHref} style={styles.navLink}>
             Theatre
           </Link>
         </div>

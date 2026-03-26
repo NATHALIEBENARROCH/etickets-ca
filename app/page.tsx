@@ -7,6 +7,7 @@ import AutoGeoCity from "@/app/components/AutoGeoCity";
 import EventCardImage from "@/app/components/EventCardImage";
 import GeoCarouselIndicators from "@/app/components/GeoCarouselIndicators";
 import { resolveEventImageCandidates } from "@/lib/eventImages";
+import { resolveCountryProfile } from "@/lib/locationQuery";
 
 type EventItem = {
   ID: number;
@@ -27,6 +28,13 @@ const POPULAR_SEARCH_TERMS = [
 ];
 
 const NEARBY_CITY_CANDIDATES: Record<string, string[]> = {
+  iquique: ["Antofagasta", "La Serena", "Santiago", "Concepcion"],
+  antofagasta: ["Iquique", "La Serena", "Santiago", "Concepcion"],
+  rancagua: ["Santiago", "Valparaiso", "Vina del Mar", "Concepcion"],
+  santiago: ["Valparaiso", "Vina del Mar", "Concepcion", "Rancagua"],
+  valparaiso: ["Santiago", "Vina del Mar", "Rancagua", "Concepcion"],
+  "vina del mar": ["Valparaiso", "Santiago", "Rancagua", "Concepcion"],
+  concepcion: ["Santiago", "Valparaiso", "Vina del Mar", "Rancagua"],
   "les eboulements": ["Montreal", "Quebec", "Levis", "Trois-Rivieres"],
   laval: ["Montreal", "Longueuil", "Brossard", "Laval"],
   montreal: ["Laval", "Longueuil", "Brossard", "Laval"],
@@ -41,26 +49,6 @@ const NEARBY_CITY_CANDIDATES: Record<string, string[]> = {
   edmonton: ["St. Albert", "Calgary", "Red Deer", "Leduc"],
   ottawa: ["Gatineau", "Montreal", "Kingston", "Cornwall"],
 };
-
-const GLOBAL_FALLBACK_HUBS: Array<{ name: string; lat: number; lon: number }> = [
-  { name: "Santiago", lat: -33.4489, lon: -70.6693 },
-  { name: "Buenos Aires", lat: -34.6037, lon: -58.3816 },
-  { name: "Lima", lat: -12.0464, lon: -77.0428 },
-  { name: "Sao Paulo", lat: -23.5558, lon: -46.6396 },
-  { name: "Bogota", lat: 4.711, lon: -74.0721 },
-  { name: "Mexico City", lat: 19.4326, lon: -99.1332 },
-  { name: "Miami", lat: 25.7617, lon: -80.1918 },
-  { name: "Los Angeles", lat: 34.0522, lon: -118.2437 },
-  { name: "New York", lat: 40.7128, lon: -74.006 },
-  { name: "Toronto", lat: 43.6532, lon: -79.3832 },
-  { name: "Montreal", lat: 45.5017, lon: -73.5673 },
-  { name: "London", lat: 51.5072, lon: -0.1276 },
-  { name: "Paris", lat: 48.8566, lon: 2.3522 },
-  { name: "Madrid", lat: 40.4168, lon: -3.7038 },
-  { name: "Berlin", lat: 52.52, lon: 13.405 },
-  { name: "Tokyo", lat: 35.6762, lon: 139.6503 },
-  { name: "Sydney", lat: -33.8688, lon: 151.2093 },
-];
 
 function normalizeCity(raw: string) {
   let city = (raw || "").trim().replace(/\+/g, " ");
@@ -107,62 +95,17 @@ function distanceInKm(
   return earthRadiusKm * c;
 }
 
-async function geocodeCity(city: string) {
-  const query = city.trim();
-  if (!query) return null;
-
-  try {
-    const response = await fetch(
-      `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=${encodeURIComponent(query)}`,
-      {
-        headers: {
-          Accept: "application/json",
-          "User-Agent": "etickets-ca/1.0",
-        },
-        next: { revalidate: 86400 },
-      },
-    );
-
-    if (!response.ok) return null;
-
-    const data = (await response.json()) as Array<{ lat?: string; lon?: string }>;
-    const first = data?.[0];
-    const lat = Number.parseFloat(String(first?.lat || ""));
-    const lon = Number.parseFloat(String(first?.lon || ""));
-    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
-    return { lat, lon };
-  } catch {
-    return null;
-  }
-}
-
-async function getNearbyCityCandidates(city: string) {
-  const normalizedCity = normalizeToken(city);
-  if (!normalizedCity) return [];
-
-  const canonical = NEARBY_CITY_CANDIDATES[normalizedCity];
-  if (canonical?.length) {
-    return canonical.filter((candidate) => normalizeToken(candidate) !== normalizedCity);
-  }
-
-  const geocodedCity = await geocodeCity(city);
-  if (!geocodedCity) return [];
-
-  return [...GLOBAL_FALLBACK_HUBS]
-    .sort((first, second) => {
-      const firstDistance = distanceInKm(geocodedCity, { lat: first.lat, lon: first.lon });
-      const secondDistance = distanceInKm(geocodedCity, { lat: second.lat, lon: second.lon });
-      return firstDistance - secondDistance;
-    })
-    .map((hub) => hub.name)
-    .filter((candidate) => normalizeToken(candidate) !== normalizedCity)
-    .slice(0, 8);
-}
-
 function hasExactCityMatch(events: EventItem[], city: string) {
   const normalizedCity = normalizeToken(city);
   if (!normalizedCity) return events.length > 0;
   return events.some((event) => normalizeToken(event?.City) === normalizedCity);
+}
+
+function getNearbyCityCandidates(city: string) {
+  const normalizedCity = normalizeToken(city);
+  if (!normalizedCity) return [];
+  const canonical = NEARBY_CITY_CANDIDATES[normalizedCity] || [];
+  return canonical.filter((candidate) => normalizeToken(candidate) !== normalizedCity);
 }
 
 function uniqueByEventId(events: EventItem[]) {
@@ -176,6 +119,10 @@ function uniqueByEventId(events: EventItem[]) {
   }
 
   return unique;
+}
+
+function mergeEventLists(...lists: EventItem[][]) {
+  return uniqueByEventId(lists.flat()).slice(0, 8);
 }
 
 function toEventTimestamp(event: EventItem) {
@@ -241,10 +188,11 @@ function interleavePopularEvents(groups: Array<{ term: string; events: EventItem
 export default async function Home({
   searchParams,
 }: {
-  searchParams?: Promise<{ city?: string }> | { city?: string };
+  searchParams?: Promise<{ city?: string; dateFrom?: string; dateTo?: string }> | { city?: string; dateFrom?: string; dateTo?: string };
 }) {
   const resolvedSearchParams = searchParams ? await searchParams : {};
   const queryCity = normalizeCity(resolvedSearchParams?.city || "");
+  const queryDateFrom = String(resolvedSearchParams?.dateFrom || "").trim();
 
   const requestHeaders = await headers();
   const rawDetectedCity = (requestHeaders.get("x-vercel-ip-city") || "").trim();
@@ -316,25 +264,47 @@ export default async function Home({
     };
   }
 
-  const localizedApiUrl = activeCity
-    ? `${currentOrigin}/api/events?numberOfEvents=8&city=${encodeURIComponent(activeCity)}&cityScope=city&diversify=1`
-    : "";
+  const localizedParams = new URLSearchParams();
+  localizedParams.set("numberOfEvents", "8");
+  localizedParams.set("diversify", "1");
+  const activeCountryProfile = resolveCountryProfile(activeCity);
+  const isCountryQuery = Boolean(activeCountryProfile);
 
-  const localizedFetch = localizedApiUrl
-    ? await fetchEventList(localizedApiUrl)
-    : { events: [] as EventItem[], ok: true };
+  if (isCountryQuery && activeCountryProfile) {
+    localizedParams.set("countryId", String(activeCountryProfile.countryId));
+    localizedParams.set("countryScope", "country");
+  } else if (activeCity) {
+    localizedParams.set("city", activeCity);
+    localizedParams.set("cityScope", "city");
+  }
+  if (queryDateFrom) {
+    localizedParams.set("dateFrom", queryDateFrom);
+  }
+  const localizedApiUrl = `${currentOrigin}/api/events?${localizedParams.toString()}`;
+
+  const localizedFetch = await fetchEventList(localizedApiUrl);
   const localizedEvents = localizedFetch.events;
-  const hasExactLocalMatch = hasExactCityMatch(localizedEvents, activeCity);
+  const hasExactLocalMatch = isCountryQuery
+    ? localizedEvents.length > 0
+    : hasExactCityMatch(localizedEvents, activeCity);
 
   let nearbyCityUsed = "";
   let nearbyEvents: EventItem[] = [];
   let nearbyOk = true;
 
-  if (activeCity && !hasExactLocalMatch) {
-    const nearbyCandidates = await getNearbyCityCandidates(activeCity);
+  if (!isCountryQuery && activeCity && !hasExactLocalMatch) {
+    const nearbyCandidates = getNearbyCityCandidates(activeCity);
+
     for (const nearbyCity of nearbyCandidates) {
+      const nearbyParams = new URLSearchParams();
+      nearbyParams.set("numberOfEvents", "8");
+      nearbyParams.set("city", nearbyCity);
+      nearbyParams.set("cityScope", "city");
+      nearbyParams.set("diversify", "1");
+      if (queryDateFrom) nearbyParams.set("dateFrom", queryDateFrom);
+
       const nearbyFetch = await fetchEventList(
-        `${currentOrigin}/api/events?numberOfEvents=8&city=${encodeURIComponent(nearbyCity)}&cityScope=city&diversify=1`,
+        `${currentOrigin}/api/events?${nearbyParams.toString()}`,
       );
 
       nearbyOk = nearbyOk && nearbyFetch.ok;
@@ -347,14 +317,23 @@ export default async function Home({
     }
   }
 
+  const primaryEvents = hasExactLocalMatch
+    ? localizedEvents
+    : nearbyEvents;
+
   const curatedPopularFetch =
-    localizedEvents.length === 0 && nearbyEvents.length === 0
+    primaryEvents.length < 8
       ? await fetchPopularFallback()
       : { events: [] as EventItem[], ok: true };
   const backupFallbackFetch =
-    localizedEvents.length === 0 && nearbyEvents.length === 0 && curatedPopularFetch.events.length === 0
+    primaryEvents.length < 8 && curatedPopularFetch.events.length === 0
       ? await fetchEventList(
-          `${currentOrigin}/api/events?numberOfEvents=8&parentCategoryID=2&diversify=1`,
+          `${currentOrigin}/api/events?${new URLSearchParams({
+            numberOfEvents: "8",
+            parentCategoryID: "2",
+            diversify: "1",
+            ...(queryDateFrom ? { dateFrom: queryDateFrom } : {}),
+          }).toString()}`,
         )
       : { events: [] as EventItem[], ok: true };
   const fallbackEvents =
@@ -362,9 +341,9 @@ export default async function Home({
       ? curatedPopularFetch.events
       : backupFallbackFetch.events;
 
-  const eventsToShow = hasExactLocalMatch
-    ? localizedEvents
-    : (nearbyEvents.length > 0 ? nearbyEvents : fallbackEvents);
+  const eventsToShow = primaryEvents.length > 0
+    ? mergeEventLists(primaryEvents, fallbackEvents)
+    : fallbackEvents;
 
   const hadApiError =
     localizedEvents.length === 0 && nearbyEvents.length === 0 && fallbackEvents.length === 0
@@ -374,12 +353,25 @@ export default async function Home({
   const hasNearbyEvents = !hasLocalEvents && nearbyEvents.length > 0;
   const hasPopularFallback =
     !hasLocalEvents && !hasNearbyEvents && fallbackEvents.length > 0;
-  const locationText = activeCity || "your area";
+  const locationText = activeCountryProfile?.label || activeCity || "your area";
   const sectionHeading = hasLocalEvents
     ? `Events in ${locationText}`
     : (hasNearbyEvents
       ? `Events near ${locationText}`
       : "Popular events right now");
+
+  const concertsHref = `/events/2?${new URLSearchParams({
+    ...(activeCity ? { city: activeCity } : {}),
+    ...(queryDateFrom ? { dateFrom: queryDateFrom } : {}),
+  }).toString()}`;
+  const sportsHref = `/events/1?${new URLSearchParams({
+    ...(activeCity ? { city: activeCity } : {}),
+    ...(queryDateFrom ? { dateFrom: queryDateFrom } : {}),
+  }).toString()}`;
+  const theatreHref = `/events/3?${new URLSearchParams({
+    ...(activeCity ? { city: activeCity } : {}),
+    ...(queryDateFrom ? { dateFrom: queryDateFrom } : {}),
+  }).toString()}`;
 
   return (
     <main style={styles.page}>
@@ -392,13 +384,13 @@ export default async function Home({
         <div style={styles.heroOverlay}>
           <h1 style={styles.heroTitle}>GREAT EVENTS AT SMALL PRICES</h1>
 
-          <HeroSearch />
+          <HeroSearch dateFrom={queryDateFrom} />
 
           <div style={styles.heroCtas}>
             {/* <Link href="/events" style={styles.ctaSecondary}>
               Browse all events
             </Link> */}
-            <Link href="/events/2" style={styles.ctaSecondary}>
+            <Link href={concertsHref} style={styles.ctaSecondary}>
               Browse concerts
             </Link>
           </div>
@@ -422,11 +414,17 @@ export default async function Home({
               style={styles.locationInput}
               autoComplete="address-level2"
             />
-            <button type="submit" style={styles.locationButton}>
-              Update
-            </button>
+            {queryDateFrom ? <input type="hidden" name="dateFrom" value={queryDateFrom} /> : null}
+            <input
+              type="submit"
+              style={styles.locationButton}
+              value="Update"
+            />
           </form>
           <span style={styles.locationBadge}>You are in: {locationText}</span>
+          {queryDateFrom ? (
+            <span style={styles.locationBadge}>Date: {queryDateFrom}</span>
+          ) : null}
           {!hasLocalEvents && !hasPopularFallback ? (
             <span style={styles.locationHint}>
               Looking for nearby events.
@@ -434,7 +432,7 @@ export default async function Home({
           ) : null}
           {!hasLocalEvents && hasNearbyEvents ? (
             <span style={styles.locationHint}>
-              No direct matches in {locationText}. Showing events in {nearbyCityUsed}.
+              No direct matches in {locationText}. Showing events in {nearbyCityUsed} plus featured picks.
             </span>
           ) : null}
           {!hasLocalEvents && hasPopularFallback ? (
@@ -459,8 +457,8 @@ export default async function Home({
               className="tb-geo-grid"
               style={styles.localGrid}
             >
-              {eventsToShow.slice(0, 6).map((event) => {
-                const imageSources = resolveEventImageCandidates(event);
+              {eventsToShow.slice(0, 8).map((event) => {
+                const imageSources = resolveEventImageCandidates(event, { allowMapFallback: false });
                 return (
                   <Link
                     key={event.ID}
@@ -468,12 +466,14 @@ export default async function Home({
                     className="tb-geo-card"
                     style={styles.localCard}
                   >
-                    <EventCardImage
-                      sources={imageSources}
-                      alt={event.Name || "Event image"}
-                      className="tb-geo-image"
-                      style={styles.localImage}
-                    />
+                    <div style={styles.localImageWrap}>
+                      <EventCardImage
+                        sources={imageSources}
+                        alt={event.Name || "Event image"}
+                        className="tb-geo-image"
+                        style={styles.localImage}
+                      />
+                    </div>
                     <div style={styles.localTitle}>
                       {event.Name || "Untitled event"}
                     </div>
@@ -485,13 +485,14 @@ export default async function Home({
                     <div style={styles.localDate}>
                       {formatEventDate(event.DisplayDate)}
                     </div>
+                    <div className="tb-geo-cta" style={styles.localCta}>View Tickets</div>
                   </Link>
                 );
               })}
             </div>
             <GeoCarouselIndicators
               containerId="home-geo-carousel"
-              itemCount={Math.min(eventsToShow.length, 6)}
+              itemCount={Math.min(eventsToShow.length, 8)}
             />
           </>
         )}
@@ -503,17 +504,17 @@ export default async function Home({
 
         {/* ✅ Transition + hover comes from globals.css (see note below) */}
         <div style={styles.grid}>
-          <Link href="/events/2" className="tb-card" style={styles.card}>
+          <Link href={concertsHref} className="tb-card" style={styles.card}>
             <h3 style={styles.cardTitle}>🎵 Music</h3>
             <p style={styles.cardText}>Concerts & tours</p>
           </Link>
 
-          <Link href="/events/1" className="tb-card" style={styles.card}>
+          <Link href={sportsHref} className="tb-card" style={styles.card}>
             <h3 style={styles.cardTitle}>🏀 Sports</h3>
             <p style={styles.cardText}>Games & matches</p>
           </Link>
 
-          <Link href="/events/3" className="tb-card" style={styles.card}>
+          <Link href={theatreHref} className="tb-card" style={styles.card}>
             <h3 style={styles.cardTitle}>🎭 Theatre</h3>
             <p style={styles.cardText}>Shows & performances</p>
           </Link>
@@ -698,6 +699,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   localCard: {
     display: "block",
+    position: "relative",
     textDecoration: "none",
     color: "#111",
     padding: 14,
@@ -706,6 +708,9 @@ const styles: Record<string, React.CSSProperties> = {
     background: "#f4f6fa",
     boxShadow: "12px 12px 30px rgba(60,60,60,0.45)",
     transition: "transform 0.2s ease, box-shadow 0.2s ease",
+  },
+  localImageWrap: {
+    position: "relative",
   },
   localImage: {
     width: "100%",
@@ -716,10 +721,28 @@ const styles: Record<string, React.CSSProperties> = {
     background: "#f3f4f6",
     marginBottom: 12,
   },
+  localCta: {
+    marginTop: 12,
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 999,
+    padding: "10px 14px",
+    fontSize: 12,
+    fontWeight: 800,
+    letterSpacing: 0.4,
+    textTransform: "uppercase",
+    color: "#ffffff",
+    background: "#111827",
+    border: "1px solid rgba(17,24,39,0.2)",
+    boxShadow: "0 8px 20px rgba(0,0,0,0.16)",
+    transition: "transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease",
+  },
   localTitle: {
     fontWeight: 700,
     fontSize: 15,
     lineHeight: 1.3,
+    minHeight: 39,
   },
   localMeta: {
     marginTop: 6,

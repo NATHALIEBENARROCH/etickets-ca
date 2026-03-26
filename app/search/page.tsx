@@ -23,7 +23,7 @@ type EventItem = {
 const PAGE_STEP = 50;
 const MAX_LIMIT = 200;
 
-function buildSearchHref(query: string, options: { city?: string; limit: number }) {
+function buildSearchHref(query: string, options: { city?: string; dateFrom?: string; limit: number }) {
   const params = new URLSearchParams();
   params.set("q", query);
   params.set("limit", String(options.limit));
@@ -32,13 +32,17 @@ function buildSearchHref(query: string, options: { city?: string; limit: number 
     params.set("city", options.city);
   }
 
+  if (options.dateFrom) {
+    params.set("dateFrom", options.dateFrom);
+  }
+
   return `/search?${params.toString()}`;
 }
 
 export default async function SearchPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; city?: string; limit?: string }> | { q?: string; city?: string; limit?: string };
+  searchParams: Promise<{ q?: string; city?: string; dateFrom?: string; limit?: string }> | { q?: string; city?: string; dateFrom?: string; limit?: string };
 }) {
   const requestHeaders = await headers();
   const requestHost = requestHeaders.get("host") || "";
@@ -48,6 +52,7 @@ export default async function SearchPage({
   const resolvedSearchParams = await searchParams;
   const q = (resolvedSearchParams?.q ?? "").trim();
   const city = (resolvedSearchParams?.city ?? "").trim();
+  const dateFrom = (resolvedSearchParams?.dateFrom ?? "").trim();
   const rawLimit = Number.parseInt(resolvedSearchParams?.limit || `${PAGE_STEP}`, 10);
   const limit = Number.isFinite(rawLimit) && rawLimit > 0
     ? Math.min(rawLimit, MAX_LIMIT)
@@ -61,7 +66,7 @@ export default async function SearchPage({
   try {
     if (q) {
       const res = await fetch(
-        `${currentOrigin}/api/search?q=${encodeURIComponent(q)}&city=${encodeURIComponent(city)}&limit=${limit}`,
+        `${currentOrigin}/api/search?q=${encodeURIComponent(q)}&city=${encodeURIComponent(city)}&dateFrom=${encodeURIComponent(dateFrom)}&limit=${limit}`,
         { cache: "no-store" },
       );
 
@@ -99,6 +104,7 @@ export default async function SearchPage({
       <p style={styles.meta}>
         Query: <b>{q || "(empty)"}</b>
         {city ? <> — City: <b>{city}</b></> : null}
+        {dateFrom ? <> — From: <b>{dateFrom}</b></> : null}
         {" — Results: "}<b>{q ? totalCount : 0}</b>
         {q && totalCount > events.length ? <> <span style={styles.metaSecondary}>(showing {events.length})</span></> : null}
       </p>
@@ -110,7 +116,11 @@ export default async function SearchPage({
             We interpreted your search using <b>{fallbackStrategy || "smart matching"}</b>.
           </div>
           <div style={{ marginTop: 8 }}>
-            <Link href={`/search?q=${encodeURIComponent(q)}${city ? `&city=${encodeURIComponent(city)}` : ""}`} style={styles.panelLink}>
+            <Link href={`/search?${new URLSearchParams({
+              q,
+              ...(city ? { city } : {}),
+              ...(dateFrom ? { dateFrom } : {}),
+            }).toString()}`} style={styles.panelLink}>
               Retry exact search for &quot;{q}&quot;
             </Link>
           </div>
@@ -177,13 +187,13 @@ export default async function SearchPage({
           </div>
           <div style={styles.paginationRow}>
             {events.length >= limit && limit < MAX_LIMIT ? (
-              <Link href={buildSearchHref(q, { city, limit: Math.min(limit + PAGE_STEP, MAX_LIMIT) })} style={styles.paginationLink} scroll={false}>
+              <Link href={buildSearchHref(q, { city, dateFrom, limit: Math.min(limit + PAGE_STEP, MAX_LIMIT) })} style={styles.paginationLink} scroll={false}>
                 Load more
               </Link>
             ) : null}
 
             {limit > PAGE_STEP ? (
-              <Link href={buildSearchHref(q, { city, limit: PAGE_STEP })} style={styles.paginationLink} scroll={false}>
+              <Link href={buildSearchHref(q, { city, dateFrom, limit: PAGE_STEP })} style={styles.paginationLink} scroll={false}>
                 Show less
               </Link>
             ) : null}

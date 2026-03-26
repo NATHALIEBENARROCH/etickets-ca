@@ -13,10 +13,19 @@ export default function AutoGeoCity({ hasCity }: AutoGeoCityProps) {
   const searchParams = useSearchParams();
   const [status, setStatus] = useState<"idle" | "detecting" | "denied" | "unsupported" | "insecure" | "error">("idle");
   const requestedRef = useRef(false);
+  const appliedRef = useRef(false);
 
   const applyCity = useCallback((rawCity: string) => {
     const city = String(rawCity || "").trim();
     if (!city) return false;
+    if (appliedRef.current) return true;
+    appliedRef.current = true;
+
+    try {
+      window.localStorage.setItem("tb_last_city", city);
+    } catch {
+      // Ignore storage errors.
+    }
 
     const params = new URLSearchParams(searchParams?.toString() || "");
     params.set("city", city);
@@ -45,6 +54,18 @@ export default function AutoGeoCity({ hasCity }: AutoGeoCityProps) {
 
     if (typeof window === "undefined") return;
 
+    appliedRef.current = false;
+
+    try {
+      const savedCity = String(window.localStorage.getItem("tb_last_city") || "").trim();
+      if (savedCity) {
+        applyCity(savedCity);
+        return;
+      }
+    } catch {
+      // Continue with runtime detection if storage is unavailable.
+    }
+
     if (!window.isSecureContext) {
       setStatus("insecure");
       void detectCityByIp();
@@ -59,17 +80,24 @@ export default function AutoGeoCity({ hasCity }: AutoGeoCityProps) {
 
     setStatus("detecting");
 
+    // Start IP fallback in parallel after 600ms for faster detection
+    const fallbackTimerId = window.setTimeout(() => {
+      if (!appliedRef.current) {
+        void detectCityByIp();
+      }
+    }, 600);
+
     navigator.geolocation.getCurrentPosition(
       async (position) => {
         try {
           const latitude = position.coords.latitude;
           const longitude = position.coords.longitude;
           const response = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}`,
-            {
-              headers: { Accept: "application/json" },
-            },
+            `/api/location/reverse?lat=${latitude}&lon=${longitude}`,
+            { headers: { Accept: "application/json" } },
           );
+
+          window.clearTimeout(fallbackTimerId);
 
           if (!response.ok) {
             setStatus("error");
@@ -77,14 +105,7 @@ export default function AutoGeoCity({ hasCity }: AutoGeoCityProps) {
           }
 
           const payload = await response.json();
-          const city = (
-            payload?.address?.city ||
-            payload?.address?.town ||
-            payload?.address?.village ||
-            payload?.address?.municipality ||
-            payload?.address?.state ||
-            ""
-          ).trim();
+          const city = String(payload?.city || "").trim();
 
           if (!city) {
             setStatus("error");
@@ -94,17 +115,19 @@ export default function AutoGeoCity({ hasCity }: AutoGeoCityProps) {
 
           applyCity(city);
         } catch {
+          window.clearTimeout(fallbackTimerId);
           setStatus("error");
           void detectCityByIp();
         }
       },
       () => {
+        window.clearTimeout(fallbackTimerId);
         setStatus("denied");
         void detectCityByIp();
       },
       {
         enableHighAccuracy: false,
-        timeout: 8000,
+        timeout: 2500,
         maximumAge: 600000,
       },
     );
@@ -170,13 +193,13 @@ const styles: Record<string, React.CSSProperties> = {
   info: {
     margin: "0 0 10px",
     fontSize: 13,
-    color: "#334155",
+    color: "rgba(226,232,240,0.92)",
     fontWeight: 600,
   },
   warn: {
     margin: "0 0 10px",
     fontSize: 13,
-    color: "#666",
+    color: "rgba(226,232,240,0.86)",
   },
   row: {
     display: "flex",
@@ -186,10 +209,10 @@ const styles: Record<string, React.CSSProperties> = {
     marginBottom: 10,
   },
   retryBtn: {
-    border: "1px solid rgba(31,42,90,0.28)",
+    border: "1px solid rgba(148,163,184,0.5)",
     borderRadius: 999,
-    background: "#fff",
-    color: "#1f2a5a",
+    background: "rgba(15,23,42,0.7)",
+    color: "#e2e8f0",
     fontWeight: 700,
     fontSize: 12,
     padding: "6px 10px",

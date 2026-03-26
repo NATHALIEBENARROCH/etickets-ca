@@ -10,9 +10,9 @@ type SuggestionItem = {
   Venue?: string;
 };
 
-export default function HeroSearch() {
+export default function HeroSearch({ dateFrom: initialDateFrom = "" }: { dateFrom?: string }) {
   const [q, setQ] = useState("");
-  const [city, setCity] = useState("");
+  const [dateFrom, setDateFrom] = useState(initialDateFrom);
   const [suggestions, setSuggestions] = useState<SuggestionItem[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -73,12 +73,12 @@ export default function HeroSearch() {
           autoComplete="off"
         />
         <input
-          name="city"
-          value={city}
-          onChange={(event) => setCity(event.target.value)}
-          placeholder="City (optional)"
+          name="dateFrom"
+          type="date"
+          value={dateFrom}
+          onChange={(event) => setDateFrom(event.target.value)}
+          aria-label="Event date"
           style={styles.cityInput}
-          autoComplete="off"
         />
         <button type="submit" style={styles.button}>
           Search
@@ -115,7 +115,10 @@ export default function HeroSearch() {
           )}
 
           <Link
-            href={`/search?q=${encodeURIComponent(trimmedQuery)}`}
+            href={`/search?${new URLSearchParams({
+              q: trimmedQuery,
+              ...(dateFrom ? { dateFrom } : {}),
+            }).toString()}`}
             style={styles.suggestSeeAll}
           >
             View all results for &quot;{trimmedQuery}&quot;
