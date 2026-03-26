@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
 
 type HeaderProps = {
   /** Optional: prefill the search box (ex: on /search page) */
@@ -14,8 +13,9 @@ export default function Header({
   defaultQuery = "",
   showSearch = true,
 }: HeaderProps) {
-  const searchParams = useSearchParams();
   const [q, setQ] = useState(defaultQuery);
+  const [cityParam, setCityParam] = useState("");
+  const [dateFromParam, setDateFromParam] = useState("");
   const [suggestions, setSuggestions] = useState<
     Array<{
       ID?: string | number;
@@ -27,8 +27,13 @@ export default function Header({
   const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const trimmedQuery = useMemo(() => q.trim(), [q]);
-  const cityParam = (searchParams?.get("city") || "").trim();
-  const dateFromParam = (searchParams?.get("dateFrom") || "").trim();
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    setCityParam((params.get("city") || "").trim());
+    setDateFromParam((params.get("dateFrom") || "").trim());
+  }, []);
 
   const categoryQuery = new URLSearchParams({
     ...(cityParam ? { city: cityParam } : {}),
