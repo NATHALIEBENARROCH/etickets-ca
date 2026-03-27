@@ -99,6 +99,18 @@ function isStrongNameMatch(query, candidate) {
   return queryTokens.every((token) => candidateTokenSet.has(token));
 }
 
+function isGenericArtistPlaceholder(url) {
+  const normalized = String(url || "").toLowerCase();
+  if (!normalized) return true;
+
+  // Deezer generic avatar URLs usually include an empty artist path plus zeroed size suffixes.
+  if (normalized.includes("/images/artist//")) return true;
+  if (/\/images\/artist\/[^/]*\/\d+x\d+-000000-\d+-\d+-\d+\.jpg$/.test(normalized)) return true;
+  if (/\/images\/artist\/\d+x\d+-000000-\d+-\d+-\d+\.jpg$/.test(normalized)) return true;
+
+  return false;
+}
+
 async function findImageFromItunes(name) {
   const url = `https://itunes.apple.com/search?term=${encodeURIComponent(name)}&entity=song&limit=12`;
   const response = await fetch(url, {
@@ -130,7 +142,9 @@ async function findImageFromDeezer(name) {
   const payload = await response.json();
   const artists = Array.isArray(payload?.data) ? payload.data : [];
   const first = artists.find((item) => isStrongNameMatch(name, item?.name));
-  return (first?.picture_xl || first?.picture_big || first?.picture_medium || "").replace(/^http:\/\//i, "https://");
+  const imageUrl = (first?.picture_xl || first?.picture_big || first?.picture_medium || "").replace(/^http:\/\//i, "https://");
+  if (!imageUrl || isGenericArtistPlaceholder(imageUrl)) return "";
+  return imageUrl;
 }
 
 async function createHeroFallbackResponse() {
